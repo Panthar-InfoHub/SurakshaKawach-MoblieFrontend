@@ -49,16 +49,14 @@ fun MainScreen(modifier: Modifier = Modifier) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        // Short description of Suraksha Kawach
         Text(
             text = "Suraksha Kawach is a safety app designed to protect and alert your loved ones during emergencies. Ensure your safety with just a click of a button.",
             modifier = Modifier.padding(16.dp)
         )
         Spacer(modifier = Modifier.height(16.dp))
-        // Button to navigate to LoginScreen
+
         Button(
             onClick = {
-                // Navigate to LoginScreen
                 context.startActivity(Intent(context, LoginScreen::class.java))
             },
             modifier = Modifier

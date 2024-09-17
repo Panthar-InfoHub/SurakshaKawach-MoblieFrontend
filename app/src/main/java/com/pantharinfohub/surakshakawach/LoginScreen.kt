@@ -32,7 +32,6 @@ class LoginScreen : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Corrected Firebase initialization
         FirebaseApp.initializeApp(this)
         Log.d("Firebase", "FirebaseApp initialized: ${FirebaseApp.getInstance().name}")
 
@@ -74,7 +73,6 @@ class LoginScreen : ComponentActivity() {
             auth.signInWithCredential(credential)
                 .addOnCompleteListener(this) { task ->
                     if (task.isSuccessful) {
-                        // Sign in success, navigate to HomeActivity
                         val intent = Intent(this, HomeActivity::class.java)
                         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
                         startActivity(intent)
