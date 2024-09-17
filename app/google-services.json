@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "192854867616",
+    "project_id": "suraksha-kawach-24ff7",
+    "storage_bucket": "suraksha-kawach-24ff7.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:192854867616:android:b39c0dbc8d8e5cfebad3c5",
+        "android_client_info": {
+          "package_name": "com.pantharinfohub.surakshakawach"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "192854867616-4te7lrjhfdf3tdssj8huh36rbt8oultu.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.pantharinfohub.surakshakawach",
+            "certificate_hash": "1f5a2bf8a12c957f05faca9bb83023c3cdbc6eda"
+          }
+        },
+        {
+          "client_id": "192854867616-cs2bnloopei9afvlqnsmlqme0pb3tcqj.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDtMqNL9PEHWEXg3a5Y-oY7GQ52wX3dY64"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "192854867616-cs2bnloopei9afvlqnsmlqme0pb3tcqj.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
