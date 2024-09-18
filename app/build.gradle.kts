@@ -1,6 +1,9 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+    id("com.google.gms.google-services")
+    id("com.google.firebase.crashlytics")
+    id("com.google.firebase.firebase-perf")
 }
 
 android {
@@ -66,4 +69,14 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+    implementation (libs.firebase.auth.ktx)
+    implementation (libs.play.services.auth)
+    implementation (libs.accompanist.insets)
+    implementation (platform(libs.firebase.bom))
+    implementation (libs.google.firebase.auth.ktx)
+    implementation(libs.firebase.analytics)
+    implementation(libs.firebase.crashlytics)
+    implementation (libs.play.services.auth)
+    implementation (libs.play.services.base)
+    implementation(libs.firebase.perf)
 }
