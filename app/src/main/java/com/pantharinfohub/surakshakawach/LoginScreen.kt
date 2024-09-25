@@ -100,7 +100,7 @@ class LoginScreen : ComponentActivity() {
                 .addOnCompleteListener(this) { task ->
                     if (task.isSuccessful) {
                         Log.d("LoginScreen", "Firebase authentication successful, navigating to HomeActivity")
-                        val intent = Intent(this, HomeActivity::class.java)
+                        val intent = Intent(this, PermissionActivity::class.java)
                         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
                         startActivity(intent)
                         finish()

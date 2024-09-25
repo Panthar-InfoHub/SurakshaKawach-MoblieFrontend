@@ -1,5 +1,7 @@
 package com.pantharinfohub.surakshakawach
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -11,13 +13,17 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationServices
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.GoogleMap
@@ -25,20 +31,46 @@ import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.rememberCameraPositionState
 
 class HomeScreenActivity : ComponentActivity() {
+
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+
         setContent {
-            HomeScreen()
+            HomeScreen(fusedLocationClient)
         }
     }
 }
 
 @Composable
-fun HomeScreen() {
-    // Define the initial position (latitude, longitude) and zoom level
-    val initialPosition = LatLng(25.4484, 78.5685) // Coordinates for Jhansi, India
+fun HomeScreen(fusedLocationClient: FusedLocationProviderClient) {
+    var currentLocation by remember { mutableStateOf(LatLng(25.4484, 78.5685)) } // Default to Jhansi
+    var hasLocationPermission by remember { mutableStateOf(false) }
+
+    // Request location permission if not granted
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        hasLocationPermission = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (hasLocationPermission) {
+            fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                location?.let {
+                    currentLocation = LatLng(it.latitude, it.longitude)
+                }
+            }
+        } else {
+            // Handle asking for location permission
+        }
+    }
+
+    // Define the camera position based on current location
     val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(initialPosition, 14f) // Set zoom level to 14
+        position = CameraPosition.fromLatLngZoom(currentLocation, 14f) // Set zoom level to 14
     }
 
     Column(
@@ -98,13 +130,14 @@ fun HomeScreen() {
                 )
             }
 
-            // SOS Button, positioned at the bottom of the map, partially cutting through
+            // SOS Button, positioned at the bottom of the map
             Button(
                 onClick = { /* Handle SOS click */ },
                 modifier = Modifier
                     .align(Alignment.BottomCenter) // Align to the bottom center of the map
                     .offset(y = (-30).dp) // Move it down by 50.dp to cut through the bottom of the map
-                    .height(90.dp).width(110.dp), // Adjust button size
+                    .height(90.dp)
+                    .width(110.dp), // Adjust button size
                 colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
                 shape = RoundedCornerShape(12.dp) // Round the button's corners
             ) {
