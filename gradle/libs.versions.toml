@@ -18,6 +18,8 @@ mapsCompose = "6.1.1"
 playServicesAuth = "21.2.0"
 playServicesBase = "18.5.0"
 playServicesMaps = "19.0.0"
+appcompat = "1.7.0"
+playServicesLocation = "21.3.0"
 
 [libraries]
 accompanist-insets = { module = "com.google.accompanist:accompanist-insets", version.ref = "accompanistInsets" }
@@ -48,6 +50,8 @@ maps-compose = { module = "com.google.maps.android:maps-compose", version.ref = 
 play-services-auth = { module = "com.google.android.gms:play-services-auth", version.ref = "playServicesAuth" }
 play-services-base = { module = "com.google.android.gms:play-services-base", version.ref = "playServicesBase" }
 play-services-maps = { module = "com.google.android.gms:play-services-maps", version.ref = "playServicesMaps" }
+androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
