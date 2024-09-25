@@ -67,8 +67,6 @@ fun IntroductionScreen(modifier: Modifier, currentPage: Int = 0, totalDots: Int 
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            Spacer(modifier = Modifier.height(40.dp))
-
             // Suraksha Kawach Logo
             Image(
                 painter = painterResource(id = R.drawable.suraksha_kawach_logo), // Replace with your image resource
@@ -79,7 +77,7 @@ fun IntroductionScreen(modifier: Modifier, currentPage: Int = 0, totalDots: Int 
                     .padding(16.dp)
             )
 
-            Spacer(modifier = Modifier.height(100.dp))
+            Spacer(modifier = Modifier.height(25.dp))
 
             // Middle carousel with animated text
             Box(

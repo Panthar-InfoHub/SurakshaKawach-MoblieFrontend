@@ -133,7 +133,7 @@ fun LoginScreenUI(onLoginClick: () -> Unit) {
         Image(
             painter = logoPainter,
             contentDescription = "App Logo",
-            modifier = Modifier.size(150.dp)
+            modifier = Modifier.size(300.dp)
         )
 
         // Intro Text
