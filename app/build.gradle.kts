@@ -79,4 +79,7 @@ dependencies {
     implementation (libs.play.services.auth)
     implementation (libs.play.services.base)
     implementation(libs.firebase.perf)
+    implementation (libs.play.services.maps)
+    implementation (libs.maps.compose)
+    implementation (libs.accompanist.insets.v0263beta)
 }
