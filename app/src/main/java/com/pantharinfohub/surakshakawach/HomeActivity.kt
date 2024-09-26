@@ -10,6 +10,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
+import com.google.firebase.auth.FirebaseAuth
 
 class HomeActivity : ComponentActivity() {
 
@@ -33,6 +34,10 @@ class HomeActivity : ComponentActivity() {
 
 @Composable
 fun AppNavigation(navController: NavHostController, fusedLocationClient: FusedLocationProviderClient) {
+
+    // Retrieve the Firebase UID from the session using FirebaseAuth
+    val firebaseUID = FirebaseAuth.getInstance().currentUser?.uid
+
     // Navigation host to define screen routes
     NavHost(navController = navController, startDestination = "home") {
         // Home Screen
@@ -42,6 +47,15 @@ fun AppNavigation(navController: NavHostController, fusedLocationClient: FusedLo
         // Emergency Contacts Screen
         composable("emergency_contacts") {
             EmergencyContactsScreen()
+        }
+        // Dashboard Screen, pass the firebaseUID retrieved from the session
+        composable("dashboard") {
+            if (firebaseUID != null) {
+                DashboardScreen(firebaseUID = firebaseUID)
+            } else {
+                // Handle case where user is not logged in
+                // You could navigate back to a login screen or show an error
+            }
         }
     }
 }

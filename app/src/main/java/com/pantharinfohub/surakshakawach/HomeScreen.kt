@@ -85,7 +85,8 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = { /* Handle profile click */ }) {
+                IconButton(onClick = { // Navigate to the DashboardScreen using NavController
+                    navController.navigate("dashboard")  }) {
                     Icon(
                         painter = painterResource(id = R.drawable.ic_profile), // Replace with your icon resource
                         contentDescription = "Profile",
