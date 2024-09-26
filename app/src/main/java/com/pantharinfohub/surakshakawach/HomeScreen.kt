@@ -2,35 +2,12 @@ package com.pantharinfohub.surakshakawach
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.util.Log
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DrawerValue
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.ModalNavigationDrawer
-import androidx.compose.material3.Text
-import androidx.compose.material3.rememberDrawerState
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,14 +23,28 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.rememberCameraPositionState
+import com.google.firebase.auth.FirebaseAuth
+import com.pantharinfohub.surakshakawach.api.Api
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.*
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocationProviderClient) {
     var currentLocation by remember { mutableStateOf(LatLng(25.4484, 78.5685)) } // Default to Jhansi
     var hasLocationPermission by remember { mutableStateOf(false) }
-    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    var isDrawerVisible by remember { mutableStateOf(false) } // Control the visibility of the drawer
     val coroutineScope = rememberCoroutineScope()
+
+    // Get the current user's Firebase UID
+    val firebaseAuth = FirebaseAuth.getInstance()
+    val firebaseUID = firebaseAuth.currentUser?.uid
+
+    if (firebaseUID == null) {
+        Log.e("SOS_TICKET", "User not logged in or Firebase UID is null")
+        return // Early exit if the user is not logged in
+    }
 
     // Request location permission if not granted
     val context = LocalContext.current
@@ -78,205 +69,233 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
         position = CameraPosition.fromLatLngZoom(currentLocation, 14f) // Set zoom level to 14
     }
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            // Drawer content here
-            Column(modifier = Modifier.padding(16.dp)) {
-                Button(
-                    onClick = { /* Handle Profile click */ },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.White)
-                ) {
-                    Text(text = "Profile", color = Color.Black)
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Main content
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.White)
+                .padding(16.dp)
+        ) {
+            // Top bar with icons
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = { // Navigate to the DashboardScreen using NavController
+                    navController.navigate("dashboard")  }) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_profile), // Replace with your icon resource
+                        contentDescription = "Profile",
+                        tint = Color.Black
+                    )
                 }
-
-                Button(
-                    onClick = { coroutineScope.launch {
-                        navController.navigate("emergency_contacts") // Navigate to EmergencyContactsScreen
-                    } },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.White)
-                ) {
-                    Text(text = "Add Emergency Contacts", color = Color.Black)
+                IconButton(onClick = { /* Handle location click */ }) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_location), // Replace with your icon resource
+                        contentDescription = "Location",
+                        tint = Color.Black
+                    )
                 }
-
-                Button(
-                    onClick = { /* Handle Logout click */ },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.White)
-                ) {
-                    Text(text = "Logout", color = Color.Black)
-                }
-
-                // Add spacing at the bottom of the drawer
-                Spacer(modifier = Modifier.weight(1f))
-
-                // Additional button at the bottom (e.g., Help)
-                Button(
-                    onClick = { /* Handle Help click */ },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.White)
-                ) {
-                    Text(text = "Help", color = Color.Black)
+                IconButton(onClick = {
+                    isDrawerVisible = !isDrawerVisible // Toggle the drawer visibility
+                }) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_settings), // Replace with your icon resource
+                        contentDescription = "Settings",
+                        tint = Color.Black
+                    )
                 }
             }
-        },
-        content = {
-            Column(
+
+            // Google Map with SOS button overlay
+            Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color(0xFFEEEEEE)) // Change the background color of the drawer
-                    .padding(16.dp) // Padding for the entire drawer content
+                    .weight(1.5f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                // Top bar with icons
-                Row(
+                Box(
                     modifier = Modifier
+                        .height(460.dp)
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .clip(RoundedCornerShape(16.dp))
                 ) {
-                    IconButton(onClick = { /* Handle profile click */ }) {
+                    GoogleMap(
+                        modifier = Modifier.fillMaxSize(),
+                        cameraPositionState = cameraPositionState,
+                        uiSettings = MapUiSettings(zoomControlsEnabled = false)
+                    )
+                }
+
+                // SOS Button, positioned at the bottom of the map
+                Button(
+                    onClick = {
+                        Log.d("SOS_TICKET", "SOS button clicked")
+
+                        // Handle SOS click, get the current location and send it to the server
+                        if (hasLocationPermission) {
+                            Log.d("SOS_TICKET", "Permission granted, attempting to get location")
+
+                            fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                                location?.let {
+                                    val latitude = it.latitude
+                                    val longitude = it.longitude
+                                    val timestamp = getCurrentTimestamp()
+
+                                    Log.d("SOS_TICKET", "Location acquired: Latitude: $latitude, Longitude: $longitude")
+                                    Log.d("SOS_TICKET", "Preparing to send SOS ticket to backend")
+
+                                    // Create SOS ticket and send to backend
+                                    coroutineScope.launch {
+                                        val api = Api() // Instantiate the API class
+                                        Log.d("SOS_TICKET", "Calling API to send SOS ticket")
+
+                                        val success = api.sendSosTicket(
+                                            firebaseUID = firebaseUID, // Use the actual Firebase UID from the current session
+                                            latitude = latitude.toString(),
+                                            longitude = longitude.toString(),
+                                            timestamp = timestamp
+                                        )
+
+                                        if (success) {
+                                            Log.d("SOS_TICKET", "SOS ticket created successfully")
+                                        } else {
+                                            Log.e("SOS_TICKET", "Failed to create SOS ticket")
+                                        }
+                                    }
+                                } ?: run {
+                                    Log.e("SOS_TICKET", "Location is null")
+                                }
+                            }.addOnFailureListener { exception ->
+                                Log.e("SOS_TICKET", "Failed to get location: ${exception.message}")
+                            }
+                        } else {
+                            Log.e("SOS_TICKET", "Permission not granted")
+                            // Handle permission request if necessary
+                        }
+                    },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .offset(y = (-30).dp)
+                        .height(90.dp)
+                        .width(110.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(text = "SOS", color = Color.White)
+                }
+            }
+
+            // Favourites section
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.LightGray, RoundedCornerShape(16.dp))
+                    .padding(16.dp)
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(text = "Favourites", color = Color.Black)
+                    Row(
+                        modifier = Modifier.padding(top = 16.dp),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
                         Icon(
                             painter = painterResource(id = R.drawable.ic_profile), // Replace with your icon resource
-                            contentDescription = "Profile",
-                            tint = Color.Black
+                            contentDescription = "Favorite 1",
+                            modifier = Modifier.size(60.dp),
+                            tint = Color.Magenta
                         )
-                    }
-                    IconButton(onClick = { /* Handle location click */ }) {
                         Icon(
-                            painter = painterResource(id = R.drawable.ic_location), // Replace with your icon resource
-                            contentDescription = "Location",
+                            painter = painterResource(id = R.drawable.ic_profile), // Replace with your icon resource
+                            contentDescription = "Favorite 2",
+                            modifier = Modifier.size(60.dp),
+                            tint = Color.Cyan
+                        )
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_profile), // Replace with your icon resource
+                            contentDescription = "Favorite 3",
+                            modifier = Modifier.size(60.dp),
                             tint = Color.Black
                         )
                     }
-                    IconButton(onClick = {
+                }
+            }
+
+            // Bottom navigation bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.White)
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                IconButton(onClick = { /* Handle home click */ }) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_home), // Replace with your icon resource
+                        contentDescription = "Home",
+                        tint = Color.Black
+                    )
+                }
+                IconButton(onClick = { /* Handle another screen click */ }) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_home), // Replace with your icon resource
+                        contentDescription = "Another",
+                        tint = Color.Black
+                    )
+                }
+                IconButton(onClick = { /* Handle settings click */ }) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_home), // Replace with your icon resource
+                        contentDescription = "Settings",
+                        tint = Color.Black
+                    )
+                }
+            }
+        }
+
+        // Conditional rendering of the drawer
+        if (isDrawerVisible) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(300.dp)
+                    .background(Color.Gray)
+                    .padding(16.dp)
+                    .align(Alignment.CenterStart)
+            ) {
+                Column {
+                    TextButton(onClick = { /* Handle Profile click */ }) {
+                        Text(text = "Profile", color = Color.White)
+                    }
+                    TextButton(onClick = {
                         coroutineScope.launch {
-                            drawerState.open() // Open the drawer when the settings button is clicked
+                            navController.navigate("emergency_contacts") // Navigate to EmergencyContactsScreen
                         }
                     }) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_settings), // Replace with your icon resource
-                            contentDescription = "Settings",
-                            tint = Color.Black
-                        )
+                        Text(text = "Add Emergency Contacts", color = Color.White)
                     }
-                }
-
-                // Google Map with SOS button overlay
-                Box(
-                    modifier = Modifier
-                        .weight(1.5f) // Adjust weight to reduce the height of the map
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp) // Padding around the map
-                ) {
-                    // Google Map with rounded corners
-                    Box(
-                        modifier = Modifier
-                            .height(460.dp) // Set explicit height for the map
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp)) // Add rounded corners to the map
-                    ) {
-                        GoogleMap(
-                            modifier = Modifier.fillMaxSize(),
-                            cameraPositionState = cameraPositionState,
-                            uiSettings = MapUiSettings(zoomControlsEnabled = false)
-                        )
+                    TextButton(onClick = { /* Handle Logout click */ }) {
+                        Text(text = "Logout", color = Color.White)
                     }
-
-                    // SOS Button, positioned at the bottom of the map
-                    Button(
-                        onClick = { /* Handle SOS click */ },
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter) // Align to the bottom center of the map
-                            .offset(y = (-30).dp) // Move it down by 50.dp to cut through the bottom of the map
-                            .height(90.dp)
-                            .width(110.dp), // Adjust button size
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
-                        shape = RoundedCornerShape(12.dp) // Round the button's corners
-                    ) {
-                        Text(text = "SOS", color = Color.White)
-                    }
-                }
-
-                // Favourites section
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color.LightGray, RoundedCornerShape(16.dp))
-                        .padding(16.dp)
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(text = "Favourites", color = Color.Black)
-                        Row(
-                            modifier = Modifier.padding(top = 16.dp),
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.ic_profile), // Replace with your icon resource
-                                contentDescription = "Favorite 1",
-                                modifier = Modifier.size(60.dp),
-                                tint = Color.Magenta
-                            )
-                            Icon(
-                                painter = painterResource(id = R.drawable.ic_profile), // Replace with your icon resource
-                                contentDescription = "Favorite 2",
-                                modifier = Modifier.size(60.dp),
-                                tint = Color.Cyan
-                            )
-                            Icon(
-                                painter = painterResource(id = R.drawable.ic_profile), // Replace with your icon resource
-                                contentDescription = "Favorite 3",
-                                modifier = Modifier.size(60.dp),
-                                tint = Color.Black
-                            )
-                        }
-                    }
-                }
-
-                // Bottom navigation bar
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color.White)
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    IconButton(onClick = { /* Handle home click */ }) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_home), // Replace with your icon resource
-                            contentDescription = "Home",
-                            tint = Color.Black
-                        )
-                    }
-                    IconButton(onClick = { /* Handle another screen click */ }) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_home), // Replace with your icon resource
-                            contentDescription = "Another",
-                            tint = Color.Black
-                        )
-                    }
-                    IconButton(onClick = { /* Handle settings click */ }) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_home), // Replace with your icon resource
-                            contentDescription = "Settings",
-                            tint = Color.Black
-                        )
+                    Spacer(modifier = Modifier.weight(1f))
+                    TextButton(onClick = { /* Handle Help click */ }) {
+                        Text(text = "Help", color = Color.White)
                     }
                 }
             }
         }
-    )
+    }
+}
+
+// Function to get the current timestamp
+fun getCurrentTimestamp(): String {
+    val sdf = SimpleDateFormat("dd MMMM yyyy", Locale.getDefault())
+    return sdf.format(Date())
 }
