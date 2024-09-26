@@ -12,15 +12,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.accompanist.insets.ProvideWindowInsets
@@ -31,23 +29,25 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
+import com.pantharinfohub.surakshakawach.api.Api
 import com.pantharinfohub.surakshakawach.ui.theme.PurpleGradient
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class LoginScreen : ComponentActivity() {
 
     private lateinit var auth: FirebaseAuth
     private lateinit var googleSignInClient: GoogleSignInClient
+    private var selectedGender: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         // Initialize Firebase
         FirebaseApp.initializeApp(this)
-        Log.d("LoginScreen", "FirebaseApp initialized: ${FirebaseApp.getInstance().name}")
-
-        // Initialize FirebaseAuth
         auth = FirebaseAuth.getInstance()
-        Log.d("LoginScreen", "FirebaseAuth initialized")
 
         // Set up Google Sign-In options
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
@@ -56,82 +56,115 @@ class LoginScreen : ComponentActivity() {
             .build()
 
         googleSignInClient = GoogleSignIn.getClient(this, gso)
-        Log.d("LoginScreen", "GoogleSignInClient initialized")
 
         // Set the UI content
         setContent {
             ProvideWindowInsets {
-                LoginScreenUI {
-                    Log.d("LoginScreen", "Login button clicked, starting Google Sign-In")
-                    signInWithGoogle()
-                }
+                LoginScreenUI(
+                    onGenderSelected = { gender ->
+                        selectedGender = gender
+                    },
+                    onLoginClick = {
+                        if (selectedGender == null) {
+                            Toast.makeText(this, "Please select a gender before proceeding", Toast.LENGTH_SHORT).show()
+                        } else {
+                            signInWithGoogle()
+                        }
+                    }
+                )
             }
         }
     }
 
-    // Launcher for Google Sign-In activity
     private val googleSignInLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        Log.d("LoginScreen", "Google Sign-In activity result received")
         if (result.resultCode == RESULT_OK) {
-            Log.d("LoginScreen", "Google Sign-In successful, handling result")
             val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
             handleSignInResult(task.result)
         } else {
-            Log.e("LoginScreen", "Google Sign-In failed, resultCode: ${result.resultCode}")
             Toast.makeText(this, "Google Sign-In failed", Toast.LENGTH_SHORT).show()
         }
     }
 
-    // Start Google Sign-In process
     private fun signInWithGoogle() {
         val signInIntent = googleSignInClient.signInIntent
-        Log.d("LoginScreen", "Launching Google Sign-In intent")
         googleSignInLauncher.launch(signInIntent)
     }
 
-    // Handle the result of the Google Sign-In
     private fun handleSignInResult(account: GoogleSignInAccount?) {
         account?.let {
-            Log.d("LoginScreen", "Google Sign-In successful, signing in to Firebase with account: ${it.email}")
             val credential = GoogleAuthProvider.getCredential(account.idToken, null)
             auth.signInWithCredential(credential)
                 .addOnCompleteListener(this) { task ->
                     if (task.isSuccessful) {
-                        Log.d("LoginScreen", "Firebase authentication successful, navigating to HomeActivity")
-                        val intent = Intent(this, PermissionActivity::class.java)
-                        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                        startActivity(intent)
-                        finish()
+                        val userName = account.displayName
+                        val userEmail = account.email
+                        sendUserDataToBackend(userName, userEmail, selectedGender!!)
                     } else {
-                        Log.e("LoginScreen", "Firebase authentication failed: ${task.exception?.message}")
                         Toast.makeText(this, "Authentication Failed.", Toast.LENGTH_SHORT).show()
                     }
                 }
-        } ?: run {
-            Log.e("LoginScreen", "Google account is null, sign-in failed")
-            Toast.makeText(this, "Google Sign-In failed", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun sendUserDataToBackend(name: String?, email: String?, gender: String) {
+        // Get Firebase UID
+        val firebaseUID = auth.currentUser?.uid
+
+        if (firebaseUID != null && name != null && email != null) {
+            // Call the API to create the user on the backend
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val api = Api()
+                    val success = api.createUser(firebaseUID, name, email, gender)
+
+                    // Handle response on the main thread
+                    withContext(Dispatchers.Main) {
+                        if (success) {
+                            // If user creation is successful, store the flag in SharedPreferences
+                            UserPreferences.setUserCreated(this@LoginScreen, true)
+
+                            // Navigate to the next screen
+                            val intent = Intent(this@LoginScreen, PermissionActivity::class.java)
+                            startActivity(intent)
+                            finish()
+                        } else {
+                            // Handle failure (e.g., show a toast message)
+                            Toast.makeText(this@LoginScreen, "Failed to create user. Please try again.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } catch (e: Exception) {
+                    // Handle exception on the main thread
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@LoginScreen, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        } else {
+            // Handle null cases for firebaseUID, name, or email
+            Toast.makeText(this, "Invalid user data.", Toast.LENGTH_SHORT).show()
         }
     }
 }
 
 @Composable
-fun LoginScreenUI(onLoginClick: () -> Unit) {
+fun LoginScreenUI(onGenderSelected: (String) -> Unit, onLoginClick: () -> Unit) {
+    var selectedGender by remember { mutableStateOf<String?>(null) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(PurpleGradient) // Assuming you have a gradient setup
+            .background(PurpleGradient)
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
     ) {
         Spacer(modifier = Modifier.height(40.dp))
 
-        // Suraksha Kawach Logo
-        val logoPainter: Painter = painterResource(id = R.drawable.suraksha_kawach_logo) // Replace with your logo
+        // Logo
         Image(
-            painter = logoPainter,
+            painter = painterResource(id = R.drawable.suraksha_kawach_logo),
             contentDescription = "App Logo",
             modifier = Modifier.size(300.dp)
         )
@@ -146,22 +179,41 @@ fun LoginScreenUI(onLoginClick: () -> Unit) {
             modifier = Modifier.padding(horizontal = 16.dp)
         )
 
-        // Subtext
-        Text(
-            text = "Ensure your safety with just a click of a button",
-            color = Color.White,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Light,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
+        // Gender Selection
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            Button(
+                onClick = {
+                    selectedGender = "male"
+                    onGenderSelected("male")
+                },
+                modifier = Modifier.weight(1f).padding(8.dp),
+                colors = if (selectedGender == "male") ButtonDefaults.buttonColors(containerColor = Color.Blue)
+                else ButtonDefaults.buttonColors(containerColor = Color.Gray)
+            ) {
+                Text(text = "Male", color = Color.White)
+            }
+
+            Button(
+                onClick = {
+                    selectedGender = "female"
+                    onGenderSelected("female")
+                },
+                modifier = Modifier.weight(1f).padding(8.dp),
+                colors = if (selectedGender == "female") ButtonDefaults.buttonColors(containerColor = Color.Blue)
+                else ButtonDefaults.buttonColors(containerColor = Color.Gray)
+            ) {
+                Text(text = "Female", color = Color.White)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         // Google Sign-In Button
         Button(
-            onClick = {
-                Log.d("LoginScreenUI", "Sign-In button clicked")
-                onLoginClick()
-            },
+            onClick = onLoginClick,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
@@ -171,39 +223,6 @@ fun LoginScreenUI(onLoginClick: () -> Unit) {
             Text(text = "Continue with Google")
         }
 
-        // Spacer
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Age and Gender Buttons
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            Button(
-                onClick = { /* TODO: Handle Age Click */ },
-                modifier = Modifier.weight(1f).padding(8.dp),
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Gray)
-            ) {
-                Text(text = "AGE", color = Color.White)
-            }
-
-            Button(
-                onClick = { /* TODO: Handle Gender Click */ },
-                modifier = Modifier.weight(1f).padding(8.dp),
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Gray)
-            ) {
-                Text(text = "GENDER", color = Color.White)
-            }
-        }
-
         Spacer(modifier = Modifier.height(40.dp))
     }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun LoginScreenPreview() {
-    LoginScreenUI(onLoginClick = {})
 }
