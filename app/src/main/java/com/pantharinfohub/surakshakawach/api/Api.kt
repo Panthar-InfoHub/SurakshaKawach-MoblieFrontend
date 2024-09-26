@@ -92,6 +92,15 @@ class Api {
         return response.status == HttpStatusCode.Created
     }
 
+//    // Function to get emergency contacts
+//    suspend fun getEmergencyContacts(firebaseUID: String): List<ApiContact>? {
+//        val response: List<ApiContact> = client.get("https://surakshakawach-mobilebackend-192854867616.asia-south2.run.app/api/v1/user/emergency-contacts") {
+//            parameter("firebaseUID", firebaseUID)
+//        }
+//        return response
+//    }
+
+
     // Function to send SOS ticket to the server using x-www-form-urlencoded
     suspend fun sendSosTicket(
         firebaseUID: String,

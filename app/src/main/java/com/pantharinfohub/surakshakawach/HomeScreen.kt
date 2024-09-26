@@ -1,8 +1,10 @@
 package com.pantharinfohub.surakshakawach
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.util.Log
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -90,23 +92,19 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
                     Icon(
                         painter = painterResource(id = R.drawable.ic_profile), // Replace with your icon resource
                         contentDescription = "Profile",
-                        tint = Color.Black
+                        tint = Color.Black,
+                        modifier = Modifier.size(58.dp)
                     )
                 }
-                IconButton(onClick = { /* Handle location click */ }) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.ic_location), // Replace with your icon resource
-                        contentDescription = "Location",
-                        tint = Color.Black
-                    )
-                }
+                Text(text = "Suraksha Kawach", color = Color.Black, modifier = Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.headlineSmall )
                 IconButton(onClick = {
                     isDrawerVisible = !isDrawerVisible // Toggle the drawer visibility
                 }) {
                     Icon(
                         painter = painterResource(id = R.drawable.ic_settings), // Replace with your icon resource
                         contentDescription = "Settings",
-                        tint = Color.Black
+                        tint = Color.Black,
+                        modifier = Modifier.size(58.dp)
                     )
                 }
             }
@@ -120,7 +118,7 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
             ) {
                 Box(
                     modifier = Modifier
-                        .height(460.dp)
+                        .height(410.dp)
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(16.dp))
                 ) {
@@ -180,9 +178,9 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
                     },
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .offset(y = (-30).dp)
+                        .offset(y = (-20).dp)
                         .height(90.dp)
-                        .width(110.dp),
+                        .width(150.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
                     shape = RoundedCornerShape(12.dp)
                 ) {
@@ -194,8 +192,9 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color.LightGray, RoundedCornerShape(16.dp))
-                    .padding(16.dp)
+                    .background(Color.Gray, RoundedCornerShape(16.dp))
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                contentAlignment = Alignment.Center
             ) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -203,26 +202,23 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
                 ) {
                     Text(text = "Favourites", color = Color.Black)
                     Row(
-                        modifier = Modifier.padding(top = 16.dp),
+                        modifier = Modifier.padding(16.dp),
                         horizontalArrangement = Arrangement.Center
                     ) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_profile), // Replace with your icon resource
-                            contentDescription = "Favorite 1",
-                            modifier = Modifier.size(60.dp),
-                            tint = Color.Magenta
+                        Image(
+                            painter = painterResource(id = R.drawable.avatar1), // Replace with your avatar resource
+                            contentDescription = "Avatar 1",
+                            modifier = Modifier.size(100.dp).padding(end = 20.dp)
                         )
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_profile), // Replace with your icon resource
-                            contentDescription = "Favorite 2",
-                            modifier = Modifier.size(60.dp),
-                            tint = Color.Cyan
+                        Image(
+                            painter = painterResource(id = R.drawable.avatar2), // Replace with your avatar resource
+                            contentDescription = "Avatar 2",
+                            modifier = Modifier.size(100.dp).padding(end = 20.dp)
                         )
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_profile), // Replace with your icon resource
-                            contentDescription = "Favorite 3",
-                            modifier = Modifier.size(60.dp),
-                            tint = Color.Black
+                        Image(
+                            painter = painterResource(id = R.drawable.avatar3), // Replace with your avatar resource
+                            contentDescription = "Avatar 3",
+                            modifier = Modifier.size(100.dp).padding(start = 16.dp)
                         )
                     }
                 }
@@ -233,7 +229,7 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color.White)
-                    .padding(16.dp),
+                    .padding(top = 16.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
                 IconButton(onClick = { /* Handle home click */ }) {
@@ -243,9 +239,12 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
                         tint = Color.Black
                     )
                 }
-                IconButton(onClick = { /* Handle another screen click */ }) {
+                IconButton(onClick = {
+                    val intent = Intent(context, WatchActivity::class.java)
+                    context.startActivity(intent)
+                }) {
                     Icon(
-                        painter = painterResource(id = R.drawable.ic_home), // Replace with your icon resource
+                        painter = painterResource(id = R.drawable.ic_watch), // Replace with your icon resource
                         contentDescription = "Another",
                         tint = Color.Black
                     )
