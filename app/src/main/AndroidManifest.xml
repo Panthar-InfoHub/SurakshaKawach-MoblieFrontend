@@ -48,6 +48,12 @@
             android:label="HomeScreen"
             android:theme="@style/Theme.SurakshaKawach"/>
 
+        <activity
+            android:name=".WatchActivity"
+            android:exported="true"
+            android:label="WatchScreen"
+            android:theme="@style/Theme.SurakshaKawach"/>
+
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="AIzaSyDGXH-dOUFfd_FdeQDeFHJe2kyk8gsePEY" />
