@@ -41,6 +41,7 @@ class LoginScreen : ComponentActivity() {
     private lateinit var auth: FirebaseAuth
     private lateinit var googleSignInClient: GoogleSignInClient
     private var selectedGender: String? = null
+    private var isCreateAccount: Boolean = false // Added flag for create account
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -64,12 +65,11 @@ class LoginScreen : ComponentActivity() {
                     onGenderSelected = { gender ->
                         selectedGender = gender
                     },
-                    onLoginClick = {
-                        if (selectedGender == null) {
-                            Toast.makeText(this, "Please select a gender before proceeding", Toast.LENGTH_SHORT).show()
-                        } else {
-                            signInWithGoogle()
-                        }
+                    onSignInClick = {
+                        signInWithGoogle(false) // Only check if the user exists
+                    },
+                    onCreateAccountClick = {
+                        signInWithGoogle(true) // Sign in and create a new account
                     }
                 )
             }
@@ -87,69 +87,136 @@ class LoginScreen : ComponentActivity() {
         }
     }
 
-    private fun signInWithGoogle() {
+    // Pass a flag to determine if this is a sign-in or create account
+    private fun signInWithGoogle(createAccount: Boolean) {
+        isCreateAccount = createAccount // Store the create account flag
         val signInIntent = googleSignInClient.signInIntent
         googleSignInLauncher.launch(signInIntent)
     }
 
     private fun handleSignInResult(account: GoogleSignInAccount?) {
         account?.let {
-            val credential = GoogleAuthProvider.getCredential(account.idToken, null)
-            auth.signInWithCredential(credential)
-                .addOnCompleteListener(this) { task ->
-                    if (task.isSuccessful) {
-                        val userName = account.displayName
-                        val userEmail = account.email
-                        sendUserDataToBackend(userName, userEmail, selectedGender!!)
-                    } else {
-                        Toast.makeText(this, "Authentication Failed.", Toast.LENGTH_SHORT).show()
+            val idToken = account.idToken
+            val userName = account.displayName
+            val userEmail = account.email
+
+            if (idToken != null && userName != null && userEmail != null) {
+                val credential = GoogleAuthProvider.getCredential(idToken, null)
+                auth.signInWithCredential(credential)
+                    .addOnCompleteListener(this) { task ->
+                        if (task.isSuccessful) {
+                            if (selectedGender != null) {
+                                // Now differentiate between sign-in and create account
+                                if (isCreateAccount) {
+                                    createUserInBackend(userName, userEmail, selectedGender!!) // Passing gender now
+                                } else {
+                                    sendUserDataToBackend(userName, userEmail, selectedGender!!) // Passing gender now
+                                }
+                            } else {
+                                Toast.makeText(this, "Please select a gender before proceeding.", Toast.LENGTH_SHORT).show()
+                            }
+                        } else {
+                            Log.e("LoginScreen", "Authentication failed: ${task.exception?.message}")
+                            Toast.makeText(this, "Authentication Failed.", Toast.LENGTH_SHORT).show()
+                        }
                     }
-                }
+            } else {
+                Log.e("LoginScreen", "Google Sign-In failed: idToken, userName, or userEmail is null.")
+                Toast.makeText(this, "Google Sign-In failed. Please try again.", Toast.LENGTH_SHORT).show()
+            }
+        } ?: run {
+            Log.e("LoginScreen", "Google Sign-In failed: Account is null.")
+            Toast.makeText(this, "Google Sign-In failed: Account is null.", Toast.LENGTH_SHORT).show()
         }
     }
 
+    // Check if user exists or create a new account
     private fun sendUserDataToBackend(name: String?, email: String?, gender: String) {
-        // Get Firebase UID
         val firebaseUID = auth.currentUser?.uid
 
         if (firebaseUID != null && name != null && email != null) {
-            // Call the API to create the user on the backend
+            Log.d("LoginScreen", "Attempting to send user data to backend: UID = $firebaseUID, Name = $name, Email = $email, Gender = $gender")
+
+            // Check if the user already exists in MongoDB
             CoroutineScope(Dispatchers.IO).launch {
                 try {
                     val api = Api()
-                    val success = api.createUser(firebaseUID, name, email, gender)
+                    val userExists = api.checkIfUserExists(firebaseUID) // Check if user exists in MongoDB
 
-                    // Handle response on the main thread
+                    withContext(Dispatchers.Main) {
+                        if (userExists) {
+                            Log.d("LoginScreen", "User already exists in MongoDB: UID = $firebaseUID")
+                            // User already exists, navigate to the next screen
+                            navigateToNextScreen()
+                        } else {
+                            // User does not exist, ask user to create an account
+                            Toast.makeText(this@LoginScreen, "No account found. Please create an account.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("LoginScreen", "Error checking user in MongoDB: ${e.message}", e)
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@LoginScreen, "Error checking user: ${e.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        } else {
+            Log.e("LoginScreen", "Invalid user data: firebaseUID = $firebaseUID, name = $name, email = $email")
+            Toast.makeText(this, "Invalid user data.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // Define the createUserInBackend function
+    private fun createUserInBackend(name: String, email: String, gender: String) {
+        val firebaseUID = auth.currentUser?.uid
+
+        if (firebaseUID != null) {
+            Log.d("LoginScreen", "Creating user in backend: UID = $firebaseUID, Name = $name, Email = $email, Gender = $gender")
+
+            // Create user in MongoDB
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val api = Api()
+                    val success = api.createUser(firebaseUID, name, email, gender) // Call API to create user
+
                     withContext(Dispatchers.Main) {
                         if (success) {
                             // If user creation is successful, store the flag in SharedPreferences
                             UserPreferences.setUserCreated(this@LoginScreen, true)
 
                             // Navigate to the next screen
-                            val intent = Intent(this@LoginScreen, PermissionActivity::class.java)
-                            startActivity(intent)
-                            finish()
+                            navigateToNextScreen()
                         } else {
-                            // Handle failure (e.g., show a toast message)
-                            Toast.makeText(this@LoginScreen, "Failed to create user. Please try again.", Toast.LENGTH_SHORT).show()
+                            Log.e("LoginScreen", "Failed to create user in backend for UID: $firebaseUID")
+                            Toast.makeText(this@LoginScreen, "User is already created. Please try to Login instead.", Toast.LENGTH_SHORT).show()
                         }
                     }
                 } catch (e: Exception) {
-                    // Handle exception on the main thread
+                    Log.e("LoginScreen", "Error creating user in MongoDB: ${e.message}", e)
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(this@LoginScreen, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this@LoginScreen, "Error creating user: ${e.message}", Toast.LENGTH_LONG).show()
                     }
                 }
             }
         } else {
-            // Handle null cases for firebaseUID, name, or email
+            Log.e("LoginScreen", "Invalid user data: firebaseUID = $firebaseUID, name = $name, email = $email")
             Toast.makeText(this, "Invalid user data.", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun navigateToNextScreen() {
+        val intent = Intent(this, PermissionActivity::class.java)
+        startActivity(intent)
+        finish()
     }
 }
 
 @Composable
-fun LoginScreenUI(onGenderSelected: (String) -> Unit, onLoginClick: () -> Unit) {
+fun LoginScreenUI(
+    onGenderSelected: (String) -> Unit,
+    onSignInClick: () -> Unit,
+    onCreateAccountClick: () -> Unit
+) {
     var selectedGender by remember { mutableStateOf<String?>(null) }
 
     Column(
@@ -211,16 +278,28 @@ fun LoginScreenUI(onGenderSelected: (String) -> Unit, onLoginClick: () -> Unit) 
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Google Sign-In Button
+        // Google Sign-In Button for Sign In
         Button(
-            onClick = onLoginClick,
+            onClick = onSignInClick,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
                 .height(48.dp),
             shape = RoundedCornerShape(8.dp)
         ) {
-            Text(text = "Continue with Google")
+            Text(text = "Sign In with Google")
+        }
+
+        // Google Sign-In Button for Creating an Account
+        Button(
+            onClick = onCreateAccountClick,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .height(48.dp),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Text(text = "Create Account with Google")
         }
 
         Spacer(modifier = Modifier.height(40.dp))
