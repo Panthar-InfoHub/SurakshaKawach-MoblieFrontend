@@ -20,7 +20,6 @@ class Api {
         }
     }
 
-    // Function to send user data to the server using x-www-form-urlencoded
     suspend fun createUser(
         firebaseUID: String,
         name: String,
@@ -37,19 +36,21 @@ class Api {
             }
         )
 
-        return response.status == HttpStatusCode.OK // Assuming the API returns 201 Created on success
+        return response.status == HttpStatusCode.Created // Expect 201 for successful user creation
     }
 
-    //Function to check user exists in firebase through UID
     suspend fun checkIfUserExists(firebaseUID: String): Boolean {
-        val response: HttpResponse = client.submitForm(
-            url = "https://surakshakawach-mobilebackend-192854867616.asia-south2.run.app/api/v1/user/check",
-            formParameters = Parameters.build {
-                append("firebaseUID", firebaseUID)
+        val response: HttpResponse = client.get("https://surakshakawach-mobilebackend-192854867616.asia-south2.run.app/api/v1/user") {
+            url {
+                parameters.append("firebaseUID", firebaseUID)
             }
-        )
-        return response.status == HttpStatusCode.OK // Assuming the API returns 200 if user exists
+        }
+
+        return response.status == HttpStatusCode.OK // 200 OK means user exists
+        // Add error handling for 404 Not Found if the user doesn't exist
     }
+
+
 
     // Configure JSON parser with `ignoreUnknownKeys`
     private val json = Json {
