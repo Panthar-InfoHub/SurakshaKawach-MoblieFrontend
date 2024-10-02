@@ -1,12 +1,13 @@
 [versions]
 accompanistInsets = "0.30.1"
 accompanistInsetsVersion = "0.26.3-beta"
-agp = "8.6.1"
+agp = "8.7.0"
 androidMapsUtils = "2.3.0"
+appactions = "1.0.0"
 firebaseAuthKtx = "23.0.0"
 firebaseBom = "33.3.0"
 googleServices = "4.4.2"
-gradle = "8.6.1"
+gradle = "8.7.0"
 kotlin = "1.9.0"
 coreKtx = "1.13.1"
 junit = "4.13.2"
@@ -36,6 +37,7 @@ accompanist-insets = { module = "com.google.accompanist:accompanist-insets", ver
 accompanist-insets-v0263beta = { module = "com.google.accompanist:accompanist-insets", version.ref = "accompanistInsetsVersion" }
 android-maps-utils = { module = "com.google.maps.android:android-maps-utils", version.ref = "androidMapsUtils" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+appactions = { module = "com.google.android.appactions:appactions", version.ref = "appactions" }
 firebase-analytics = { module = "com.google.firebase:firebase-analytics" }
 firebase-auth-ktx = { module = "com.google.firebase:firebase-auth-ktx", version.ref = "firebaseAuthKtx" }
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }

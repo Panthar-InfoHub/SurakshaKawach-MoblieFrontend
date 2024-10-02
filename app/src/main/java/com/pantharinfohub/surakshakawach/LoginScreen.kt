@@ -181,10 +181,8 @@ class LoginScreen : ComponentActivity() {
 
                     withContext(Dispatchers.Main) {
                         if (success) {
-                            // If user creation is successful, store the flag in SharedPreferences
                             UserPreferences.setUserCreated(this@LoginScreen, true)
 
-                            // Navigate to the next screen
                             navigateToNextScreen()
                         } else {
                             Log.e("LoginScreen", "Failed to create user in backend for UID: $firebaseUID")
