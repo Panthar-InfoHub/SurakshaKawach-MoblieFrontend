@@ -4,6 +4,7 @@ import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -30,16 +31,38 @@ fun EmergencyContactsScreen() {
         return
     }
 
+    // State to hold emergency contacts
+    var emergencyContacts by remember { mutableStateOf(listOf<EmergencyContact>()) }
+
     // State to handle showing the dialog
     var showDialog by remember { mutableStateOf(false) }
 
     // State for the input fields in the dialog
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
-    var phoneNumber by remember { mutableStateOf("") }
+    var mobile by remember { mutableStateOf("") }
 
     // Coroutine scope to handle background tasks
     val coroutineScope = rememberCoroutineScope()
+
+    // Fetch emergency contacts from the server
+    LaunchedEffect(Unit) {
+        coroutineScope.launch {
+            try {
+                val userProfileResponse = Api().getUserProfile(firebaseUID)
+                if (userProfileResponse != null) {
+                    // Extract emergency contacts from UserData inside the response's data
+                    emergencyContacts = userProfileResponse.data.emergencyContacts ?: emptyList()
+                } else {
+                    Toast.makeText(context, "Failed to load contacts", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Log.e("API_ERROR", "Error fetching contacts: ${e.localizedMessage}")
+                Toast.makeText(context, "Error fetching contacts", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
 
     Column(
         modifier = Modifier
@@ -65,6 +88,15 @@ fun EmergencyContactsScreen() {
             Text(text = "Add Emergency Contact")
         }
 
+        // Display contacts in a list
+        LazyColumn {
+            items(emergencyContacts.size) { index ->
+                val contact = emergencyContacts[index]
+                ContactCard(contact)
+            }
+        }
+
+
         // Popup dialog for adding a new contact
         if (showDialog) {
             AlertDialog(
@@ -87,8 +119,8 @@ fun EmergencyContactsScreen() {
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         TextField(
-                            value = phoneNumber,
-                            onValueChange = { phoneNumber = it },
+                            value = mobile,
+                            onValueChange = { mobile = it },
                             label = { Text("Phone Number") },
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -104,7 +136,7 @@ fun EmergencyContactsScreen() {
                                         firebaseUID,
                                         name,
                                         email,
-                                        phoneNumber
+                                        mobile
                                     )
                                     Log.d("API_RESPONSE", "Success: $isSuccess")
 
@@ -117,7 +149,7 @@ fun EmergencyContactsScreen() {
                                         // Reset fields and close the dialog
                                         name = ""
                                         email = ""
-                                        phoneNumber = ""
+                                        mobile = ""
                                         showDialog = false
                                     } else {
                                         Toast.makeText(
@@ -146,6 +178,27 @@ fun EmergencyContactsScreen() {
                     }
                 }
             )
+        }
+    }
+}
+
+@Composable
+fun ContactCard(contact: EmergencyContact) {
+    Card(
+        shape = RoundedCornerShape(8.dp),
+        elevation = CardDefaults.cardElevation(4.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Text(text = "Name: ${contact.name}", fontWeight = FontWeight.Bold)
+            Text(text = "Email: ${contact.email}")
+            Text(text = "Phone: ${contact.mobile}")
         }
     }
 }

@@ -3,6 +3,9 @@ package com.pantharinfohub.surakshakawach
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.CountDownTimer
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -17,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavHostController
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -38,6 +42,13 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
     var hasLocationPermission by remember { mutableStateOf(false) }
     var isDrawerVisible by remember { mutableStateOf(false) } // Control the visibility of the drawer
     val coroutineScope = rememberCoroutineScope()
+
+    // State for modal dialog
+    var showModal by remember { mutableStateOf(false) }
+    var countdown by remember { mutableStateOf(3) }
+
+    // Handler for periodic location updates
+    val handler = remember { Handler(Looper.getMainLooper()) }
 
     // Get the current user's Firebase UID
     val firebaseAuth = FirebaseAuth.getInstance()
@@ -69,6 +80,88 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
     // Define the camera position based on current location
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(currentLocation, 14f) // Set zoom level to 14
+    }
+
+    // Function to start sending location every 5 seconds
+    val startSendingLocation = {
+        val locationRunnable = object : Runnable {
+            override fun run() {
+                if (hasLocationPermission) {
+                    if (ActivityCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.ACCESS_FINE_LOCATION
+                        ) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.ACCESS_COARSE_LOCATION
+                        ) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        return
+                    }
+                    fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                        location?.let {
+                            val latitude = it.latitude
+                            val longitude = it.longitude
+                            val timestamp = getCurrentTimestamp()
+
+                            Log.d("SOS_TICKET", "Location acquired: Latitude: $latitude, Longitude: $longitude")
+
+                            // Create SOS ticket and send to backend
+                            coroutineScope.launch {
+                                val api = Api() // Instantiate the API class
+                                val success = api.sendSosTicket(
+                                    firebaseUID = firebaseUID,
+                                    latitude = latitude.toString(),
+                                    longitude = longitude.toString(),
+                                    timestamp = timestamp
+                                )
+
+                                if (success) {
+                                    Log.d("SOS_TICKET", "SOS ticket sent successfully")
+                                } else {
+                                    Log.e("SOS_TICKET", "Failed to send SOS ticket")
+                                }
+                            }
+                        } ?: run {
+                            Log.e("SOS_TICKET", "Location is null")
+                        }
+                    }.addOnFailureListener { exception ->
+                        Log.e("SOS_TICKET", "Failed to get location: ${exception.message}")
+                    }
+                }
+
+                // Schedule the next location update after 5 seconds
+                handler.postDelayed(this, 5000)
+            }
+        }
+
+        // Start the location updates immediately
+        handler.post(locationRunnable)
+    }
+
+    // Function to send SOS and navigate to SOS activity
+    val sendSOSTicketAndOpenActivity = {
+        startSendingLocation()
+        context.startActivity(Intent(context, SOSActivity::class.java))
+    }
+
+
+    // Timer function for the modal
+    fun startTimer() {
+        object : CountDownTimer(3000, 1000) {
+            override fun onTick(millisUntilFinished: Long) {
+                countdown = (millisUntilFinished / 1000).toInt()
+            }
+
+            override fun onFinish() {
+                sendSOSTicketAndOpenActivity()
+            }
+        }.start()
+    }
+
+    // Function to stop sending location
+    val stopSendingLocation = {
+        handler.removeCallbacksAndMessages(null)
+        Log.d("SOS_TICKET", "Stopped sending location updates")
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -133,47 +226,12 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
                 Button(
                     onClick = {
                         Log.d("SOS_TICKET", "SOS button clicked")
-
-                        // Handle SOS click, get the current location and send it to the server
                         if (hasLocationPermission) {
-                            Log.d("SOS_TICKET", "Permission granted, attempting to get location")
-
-                            fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                                location?.let {
-                                    val latitude = it.latitude
-                                    val longitude = it.longitude
-                                    val timestamp = getCurrentTimestamp()
-
-                                    Log.d("SOS_TICKET", "Location acquired: Latitude: $latitude, Longitude: $longitude")
-                                    Log.d("SOS_TICKET", "Preparing to send SOS ticket to backend")
-
-                                    // Create SOS ticket and send to backend
-                                    coroutineScope.launch {
-                                        val api = Api() // Instantiate the API class
-                                        Log.d("SOS_TICKET", "Calling API to send SOS ticket")
-
-                                        val success = api.sendSosTicket(
-                                            firebaseUID = firebaseUID, // Use the actual Firebase UID from the current session
-                                            latitude = latitude.toString(),
-                                            longitude = longitude.toString(),
-                                            timestamp = timestamp
-                                        )
-
-                                        if (success) {
-                                            Log.d("SOS_TICKET", "SOS ticket created successfully")
-                                        } else {
-                                            Log.e("SOS_TICKET", "Failed to create SOS ticket")
-                                        }
-                                    }
-                                } ?: run {
-                                    Log.e("SOS_TICKET", "Location is null")
-                                }
-                            }.addOnFailureListener { exception ->
-                                Log.e("SOS_TICKET", "Failed to get location: ${exception.message}")
-                            }
+                            // Show the modal and start the timer
+                            showModal = true
+                            startTimer()
                         } else {
                             Log.e("SOS_TICKET", "Permission not granted")
-                            // Handle permission request if necessary
                         }
                     },
                     modifier = Modifier
@@ -186,6 +244,37 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
                 ) {
                     Text(text = "SOS", color = Color.White)
                 }
+            }
+
+            // Modal Dialog for SOS Confirmation
+            if (showModal) {
+                AlertDialog(
+                    onDismissRequest = { /* Do nothing when clicking outside */ },
+                    title = { Text("Send SOS?") },
+                    text = {
+                        Column {
+                            Text("SOS will be sent in $countdown seconds.")
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Do you want to cancel or confirm?")
+                        }
+                    },
+                    confirmButton = {
+                        Button(onClick = {
+                            // Confirm: Send SOS and navigate to SOS activity
+                            sendSOSTicketAndOpenActivity()
+                        }) {
+                            Text("Confirm")
+                        }
+                    },
+                    dismissButton = {
+                        Button(onClick = {
+                            // Cancel: Just close the modal
+                            showModal = false
+                        }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
             }
 
             // Favourites section
@@ -278,7 +367,7 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
                             navController.navigate("emergency_contacts") // Navigate to EmergencyContactsScreen
                         }
                     }) {
-                        Text(text = "Add Emergency Contacts", color = Color.White)
+                        Text(text = "Emergency Contacts", color = Color.White)
                     }
                     TextButton(onClick = { /* Handle Logout click */ }) {
                         Text(text = "Logout", color = Color.White)
