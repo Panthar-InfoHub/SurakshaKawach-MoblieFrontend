@@ -207,9 +207,17 @@ class Api {
             Log.d("SOS_TICKET", "GET request for active ticket responded with status code: $statusCode and body: $responseBody")
 
             if (statusCode.isSuccess() && responseBody.isNotEmpty()) {
+                // Extract the `ticketId` from the response JSON
                 val json = Json.parseToJsonElement(responseBody).jsonObject
-                val ticketId = json["ticketId"]?.jsonPrimitive?.content
-                return ticketId
+                val ticketId = json["data"]?.jsonObject?.get("ticketId")?.jsonPrimitive?.content
+                if (ticketId != null) {
+                    Log.d("SOS_TICKET", "Active ticket ID: $ticketId")
+                    return ticketId
+                } else {
+                    Log.e("SOS_TICKET", "Error: 'ticketId' field is missing in the active ticket response.")
+                }
+            } else {
+                Log.e("SOS_TICKET", "Failed to retrieve active ticket: ${statusCode.value}")
             }
         } catch (e: Exception) {
             Log.e("SOS_TICKET", "Error checking active ticket: ${e.localizedMessage}")
@@ -269,6 +277,5 @@ class Api {
             return false
         }
     }
-
 
 }
