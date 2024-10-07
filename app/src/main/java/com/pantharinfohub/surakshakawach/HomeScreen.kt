@@ -1,12 +1,16 @@
 package com.pantharinfohub.surakshakawach
 
 import android.Manifest
+import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.CountDownTimer
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.ActivityResultCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -24,6 +28,10 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavHostController
 import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
+import com.google.android.gms.location.Priority
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.GoogleMap
@@ -42,13 +50,20 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
     var hasLocationPermission by remember { mutableStateOf(false) }
     var isDrawerVisible by remember { mutableStateOf(false) } // Control the visibility of the drawer
     val coroutineScope = rememberCoroutineScope()
+    var isUpdatingLocation = false
+
 
     // State for modal dialog
     var showModal by remember { mutableStateOf(false) }
-    var countdown by remember { mutableStateOf(3) }
+    var countdown by remember { mutableIntStateOf(3) }
 
     // Handler for periodic location updates
     val handler = remember { Handler(Looper.getMainLooper()) }
+    val locationRequest = LocationRequest.create().apply {
+        interval = 5000 // Adjust interval as needed
+        fastestInterval = 2000
+        priority = Priority.PRIORITY_HIGH_ACCURACY
+    }
 
     // Get the current user's Firebase UID
     val firebaseAuth = FirebaseAuth.getInstance()
@@ -64,115 +79,128 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
 
     // Request location permission if not granted
     val context = LocalContext.current
-    LaunchedEffect(Unit) {
-        hasLocationPermission = ContextCompat.checkSelfPermission(
-            context, Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-
-        if (hasLocationPermission) {
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            // Permission is granted, get the last known location
             fusedLocationClient.lastLocation.addOnSuccessListener { location ->
                 location?.let {
                     currentLocation = LatLng(it.latitude, it.longitude)
                 }
             }
         } else {
-            // Handle asking for location permission
+            Log.e("LocationPermission", "Location permission denied by the user")
+            // Show a message to the user or handle the lack of location permission gracefully
         }
     }
+
+// Check permission and request if not already granted
+    LaunchedEffect(Unit) {
+        hasLocationPermission = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (hasLocationPermission) {
+            // Permission already granted, get the last known location
+            fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                location?.let {
+                    currentLocation = LatLng(it.latitude, it.longitude)
+                }
+            }
+        } else {
+            // Request location permission
+            permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+    }
+
+
 
     // Define the camera position based on current location
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(currentLocation, 14f) // Set zoom level to 14
     }
 
-    // Function to start sending location every 5 seconds
-    val startSendingLocation = {
-        val locationRunnable = object : Runnable {
-            override fun run() {
-                if (hasLocationPermission) {
-                    if (ActivityCompat.checkSelfPermission(
-                            context,
-                            Manifest.permission.ACCESS_FINE_LOCATION
-                        ) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
-                            context,
-                            Manifest.permission.ACCESS_COARSE_LOCATION
-                        ) != PackageManager.PERMISSION_GRANTED
-                    ) {
-                        return
-                    }
-                    fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                        location?.let {
-                            val latitude = it.latitude
-                            val longitude = it.longitude
-                            val timestamp = getCurrentTimestamp()
+    suspend fun handleSOSTicket(
+        firebaseUID: String,
+        latitude: String,
+        longitude: String,
+        timestamp: String
+    ) {
+        val api = Api()
+        sosTicketId = sosTicketId ?: api.checkActiveTicket(firebaseUID)
 
-                            Log.d("SOS_TICKET", "Location acquired: Latitude: $latitude, Longitude: $longitude")
-
-                            // Function to send or update SOS ticket
-                            coroutineScope.launch {
-                                val api = Api() // Instantiate the API class
-
-                                // Check if there's already an active ticket for this user
-                                if (sosTicketId == null) {
-                                    sosTicketId = api.checkActiveTicket(firebaseUID)
-                                }
-
-                                if (sosTicketId == null) {
-                                    // Create a new ticket if there is no existing ticket ID
-                                    val ticketId = api.sendSosTicket(
-                                        firebaseUID = firebaseUID,
-                                        latitude = latitude.toString(),
-                                        longitude = longitude.toString(),
-                                        timestamp = timestamp
-                                    )
-                                    if (ticketId != null) {
-                                        Log.d("SOS_TICKET", "SOS ticket sent successfully with ID: $ticketId")
-                                        sosTicketId = ticketId // Store the ticket ID for future updates
-                                    } else {
-                                        Log.e("SOS_TICKET", "Failed to send SOS ticket")
-                                    }
-                                } else {
-                                    // Update the existing ticket with new location data
-                                    val success = api.updateCoordinates(
-                                        firebaseUID = firebaseUID,
-                                        ticketId = sosTicketId,
-                                        latitude = latitude.toString(),
-                                        longitude = longitude.toString(),
-                                        timestamp = timestamp
-                                    )
-                                    if (success) {
-                                        Log.d("SOS_TICKET", "Coordinates updated successfully for ticket ID: $sosTicketId")
-                                    } else {
-                                        Log.e("SOS_TICKET", "Failed to update coordinates for ticket ID: $sosTicketId")
-                                    }
-                                }
-                            }
-
-                        } ?: run {
-                            Log.e("SOS_TICKET", "Location is null")
-                        }
-                    }.addOnFailureListener { exception ->
-                        Log.e("SOS_TICKET", "Failed to get location: ${exception.message}")
-                    }
-                }
-
-                // Schedule the next location update after 5 seconds
-                handler.postDelayed(this, 5000)
+        if (sosTicketId == null) {
+            val ticketId = api.sendSosTicket(
+                firebaseUID = firebaseUID,
+                latitude = latitude,
+                longitude = longitude,
+                timestamp = timestamp
+            )
+            if (ticketId != null) {
+                sosTicketId = ticketId
+                Log.d("SOS_TICKET", "New SOS ticket created with ID: $ticketId")
+            } else {
+                Log.e("SOS_TICKET", "Failed to create a new SOS ticket")
+            }
+        } else {
+            val success = api.updateCoordinates(
+                firebaseUID = firebaseUID,
+                ticketId = sosTicketId!!,
+                latitude = latitude,
+                longitude = longitude,
+                timestamp = timestamp
+            )
+            if (success) {
+                Log.d("SOS_TICKET", "Coordinates updated for ticket ID: $sosTicketId")
+            } else {
+                Log.e("SOS_TICKET", "Failed to update coordinates for ticket ID: $sosTicketId")
             }
         }
-
-        // Start the location updates immediately
-        handler.post(locationRunnable)
     }
 
-    // Function to send SOS and navigate to SOS activity
+    fun requestLocationUpdates(fusedLocationClient: FusedLocationProviderClient) {
+        fusedLocationClient.requestLocationUpdates(
+            locationRequest,
+            object : LocationCallback() {
+                override fun onLocationResult(locationResult: LocationResult) {
+                    val location = locationResult.lastLocation ?: return
+                    val latitude = location.latitude
+                    val longitude = location.longitude
+                    val timestamp = getCurrentTimestamp()
+
+                    currentLocation = LatLng(latitude, longitude)
+                    Log.d("SOS_TICKET", "New location: Latitude $latitude, Longitude $longitude")
+
+                    if (isUpdatingLocation) {
+                        coroutineScope.launch {
+                            handleSOSTicket(firebaseUID, latitude.toString(), longitude.toString(), timestamp)
+                        }
+                    }
+                }
+            },
+            Looper.getMainLooper()
+        )
+    }
+
+    val startSendingLocation = {
+        if (!isUpdatingLocation) {
+            isUpdatingLocation = true
+            requestLocationUpdates(fusedLocationClient)
+        }
+    }
+
+    val stopSendingLocation = {
+        isUpdatingLocation = false
+        fusedLocationClient.removeLocationUpdates(object : LocationCallback() {})
+        Log.d("SOS_TICKET", "Stopped sending location updates")
+    }
+
     val sendSOSTicketAndOpenActivity = {
         startSendingLocation()
         context.startActivity(Intent(context, SOSActivity::class.java))
     }
 
-
-    // Timer function for the modal
     fun startTimer() {
         object : CountDownTimer(5000, 1000) {
             override fun onTick(millisUntilFinished: Long) {

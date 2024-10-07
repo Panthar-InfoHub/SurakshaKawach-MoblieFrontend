@@ -16,6 +16,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -32,55 +34,109 @@ class SOSActivity : ComponentActivity() {
     private val handler = Handler(Looper.getMainLooper())
     // Store ticket ID after the first ticket is created
     private var sosTicketId: String? = null
+    private var isLocationUpdatesActive = false // Flag to manage location updates
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
+            // State to track if the ticket is closed successfully
+            val isTicketClosed = remember { mutableStateOf(false) }
+            val errorMessage = remember { mutableStateOf<String?>(null) }
+
             SOSScreen(
                 onCloseTicket = {
-                    stopSendingLocation() // Stop the location updates
-                    closeSOSTicket() // Call the function to close the ticket
-                }
+                    stopSendingLocation() // Stop the location updates immediately
+                    closeSOSTicket(
+                        onSuccess = {
+                            isTicketClosed.value = true
+                            Log.d("SOS_TICKET", "SOS ticket closed successfully")
+                        },
+                        onError = { error ->
+                            errorMessage.value = error
+                            Log.e("SOS_TICKET", "Failed to close SOS ticket: $error")
+                        }
+                    )
+                },
+                isTicketClosed = isTicketClosed.value,
+                errorMessage = errorMessage.value
             )
+
+            startSendingLocationUpdates() // Start location updates when the SOSActivity is created
         }
+    }
+
+    // Function to start sending location updates every 5 seconds
+    private fun startSendingLocationUpdates() {
+        isLocationUpdatesActive = true
+        val locationRunnable = object : Runnable {
+            override fun run() {
+                if (isLocationUpdatesActive) {
+                    if (sosTicketId != null) {
+                        Log.d("SOS_TICKET", "Sending new coordinates...")
+
+                        // Schedule the next location update after 5 seconds if still active
+                        handler.postDelayed(this, 5000)
+                    } else {
+                        Log.d("SOS_TICKET", "Ticket is closed, stopping location updates.")
+                        stopSendingLocation() // Stop if the ticket is closed
+                    }
+                }
+            }
+        }
+
+        // Start the location updates
+        handler.post(locationRunnable)
     }
 
     // Function to stop sending location updates
     private fun stopSendingLocation() {
-        // Remove all callbacks to stop periodic location updates
-        handler.removeCallbacksAndMessages(null)
+        isLocationUpdatesActive = false // Set the flag to false to stop further updates
+        handler.removeCallbacksAndMessages(null) // Remove any pending callbacks
         Log.d("SOS_TICKET", "Stopped sending location updates")
     }
 
     // Function to close the SOS ticket
-    private fun closeSOSTicket() {
+    private fun closeSOSTicket(onSuccess: () -> Unit, onError: (String) -> Unit) {
         val api = Api() // Your API instance
         val firebaseUID = FirebaseAuth.getInstance().currentUser?.uid
-        val ticketId = sosTicketId // This should be the ID of the active SOS ticket
 
-        if (firebaseUID != null && ticketId != null) {
-            // Use lifecycleScope to launch a coroutine in an Activity context
+        // Fetch the active ticket ID before attempting to close it
+        if (firebaseUID != null) {
             lifecycleScope.launch {
-                val success = api.closeTicket(
-                    firebaseUID = firebaseUID,
-                    ticketId = ticketId
-                )
-                if (success) {
-                    Log.d("SOS_TICKET", "SOS ticket closed successfully")
-                    sosTicketId = null // Clear the stored ticket ID
+                val activeTicketId = api.checkActiveTicket(firebaseUID)
+                Log.d("SOS_TICKET", "Active ticket ID fetched: $activeTicketId")
+
+                if (activeTicketId != null) {
+                    // Now that we have the active ticket ID, proceed to close it
+                    val success = api.closeTicket(
+                        firebaseUID = firebaseUID,
+                        ticketId = activeTicketId
+                    )
+                    if (success) {
+                        Log.d("SOS_TICKET", "SOS ticket closed successfully with ID: $activeTicketId")
+                        sosTicketId = null // Clear the stored ticket ID, if any
+                        onSuccess()
+                    } else {
+                        Log.e("SOS_TICKET", "Failed to close SOS ticket with ID: $activeTicketId")
+                        onError("Failed to close the ticket.")
+                    }
                 } else {
-                    Log.e("SOS_TICKET", "Failed to close SOS ticket")
+                    Log.e("SOS_TICKET", "No active ticket found for Firebase UID: $firebaseUID")
+                    onError("No active ticket found.")
                 }
             }
         } else {
-            Log.e("SOS_TICKET", "Cannot close ticket. Firebase UID or ticket ID is null.")
+            Log.e("SOS_TICKET", "Cannot close ticket. Firebase UID is null.")
+            onError("User is not logged in.")
         }
     }
 }
 
 @Composable
 fun SOSScreen(
-    onCloseTicket: () -> Unit // Pass this function to handle the close action
+    onCloseTicket: () -> Unit,
+    isTicketClosed: Boolean,
+    errorMessage: String?
 ) {
     Box(
         modifier = Modifier.fillMaxSize(),
@@ -108,6 +164,28 @@ fun SOSScreen(
                 ),
                 modifier = Modifier.padding(bottom = 32.dp)
             )
+
+            if (isTicketClosed) {
+                Text(
+                    text = "SOS Ticket closed successfully.",
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontSize = 18.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    ),
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+            }
+
+            errorMessage?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontSize = 18.sp,
+                        color = MaterialTheme.colorScheme.error
+                    ),
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+            }
 
             // Button to close the ticket and stop sending updates
             Button(
