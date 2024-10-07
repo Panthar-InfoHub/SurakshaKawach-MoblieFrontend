@@ -54,6 +54,9 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
     val firebaseAuth = FirebaseAuth.getInstance()
     val firebaseUID = firebaseAuth.currentUser?.uid
 
+    // Store ticket ID after the first ticket is created
+    var sosTicketId: String? = null
+
     if (firebaseUID == null) {
         Log.e("SOS_TICKET", "User not logged in or Firebase UID is null")
         return // Early exit if the user is not logged in
@@ -105,22 +108,46 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
 
                             Log.d("SOS_TICKET", "Location acquired: Latitude: $latitude, Longitude: $longitude")
 
-                            // Create SOS ticket and send to backend
+                            // Function to send or update SOS ticket
                             coroutineScope.launch {
                                 val api = Api() // Instantiate the API class
-                                val success = api.sendSosTicket(
-                                    firebaseUID = firebaseUID,
-                                    latitude = latitude.toString(),
-                                    longitude = longitude.toString(),
-                                    timestamp = timestamp
-                                )
 
-                                if (success) {
-                                    Log.d("SOS_TICKET", "SOS ticket sent successfully")
+                                // Check if there's already an active ticket for this user
+                                if (sosTicketId == null) {
+                                    sosTicketId = api.checkActiveTicket(firebaseUID)
+                                }
+
+                                if (sosTicketId == null) {
+                                    // Create a new ticket if there is no existing ticket ID
+                                    val ticketId = api.sendSosTicket(
+                                        firebaseUID = firebaseUID,
+                                        latitude = latitude.toString(),
+                                        longitude = longitude.toString(),
+                                        timestamp = timestamp
+                                    )
+                                    if (ticketId != null) {
+                                        Log.d("SOS_TICKET", "SOS ticket sent successfully with ID: $ticketId")
+                                        sosTicketId = ticketId // Store the ticket ID for future updates
+                                    } else {
+                                        Log.e("SOS_TICKET", "Failed to send SOS ticket")
+                                    }
                                 } else {
-                                    Log.e("SOS_TICKET", "Failed to send SOS ticket")
+                                    // Update the existing ticket with new location data
+                                    val success = api.updateCoordinates(
+                                        firebaseUID = firebaseUID,
+                                        ticketId = sosTicketId,
+                                        latitude = latitude.toString(),
+                                        longitude = longitude.toString(),
+                                        timestamp = timestamp
+                                    )
+                                    if (success) {
+                                        Log.d("SOS_TICKET", "Coordinates updated successfully for ticket ID: $sosTicketId")
+                                    } else {
+                                        Log.e("SOS_TICKET", "Failed to update coordinates for ticket ID: $sosTicketId")
+                                    }
                                 }
                             }
+
                         } ?: run {
                             Log.e("SOS_TICKET", "Location is null")
                         }
@@ -147,7 +174,7 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
 
     // Timer function for the modal
     fun startTimer() {
-        object : CountDownTimer(3000, 1000) {
+        object : CountDownTimer(5000, 1000) {
             override fun onTick(millisUntilFinished: Long) {
                 countdown = (millisUntilFinished / 1000).toInt()
             }
@@ -156,12 +183,6 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
                 sendSOSTicketAndOpenActivity()
             }
         }.start()
-    }
-
-    // Function to stop sending location
-    val stopSendingLocation = {
-        handler.removeCallbacksAndMessages(null)
-        Log.d("SOS_TICKET", "Stopped sending location updates")
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
