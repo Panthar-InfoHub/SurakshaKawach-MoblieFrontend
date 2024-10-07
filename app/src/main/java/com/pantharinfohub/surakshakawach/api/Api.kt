@@ -273,9 +273,8 @@ class Api {
             return response.status.isSuccess()
         } catch (e: Exception) {
             // Handle any exceptions (e.g., network issues)
-            println("Error closing ticket: ${e.localizedMessage}")
+            Log.e("SOS_TICKET", "Error closing ticket: ${e.localizedMessage}")
             return false
         }
     }
-
 }
