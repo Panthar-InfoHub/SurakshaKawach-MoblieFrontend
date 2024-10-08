@@ -1,11 +1,21 @@
 package com.pantharinfohub.surakshakawach
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.util.Size
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
+import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,29 +33,45 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.storage.FirebaseStorage
 import com.pantharinfohub.surakshakawach.api.Api
 import kotlinx.coroutines.launch
+import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
 class SOSActivity : ComponentActivity() {
 
-    // Handler for periodic location updates
     private val handler = Handler(Looper.getMainLooper())
-    // Store ticket ID after the first ticket is created
-    private var sosTicketId: String? = null
-    private var isLocationUpdatesActive = false // Flag to manage location updates
+    private var isCapturingImages = false
+    private var imageCapture: ImageCapture? = null
+    private lateinit var cameraExecutor: ExecutorService
+    private val captureInterval: Long = 30000 // Capture every 30 seconds
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        cameraExecutor = Executors.newSingleThreadExecutor()
         setContent {
-            // State to track if the ticket is closed successfully
             val isTicketClosed = remember { mutableStateOf(false) }
             val errorMessage = remember { mutableStateOf<String?>(null) }
 
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                startCamera()
+            } else {
+                requestPermissions(arrayOf(Manifest.permission.CAMERA), 1001)
+            }
+
             SOSScreen(
                 onCloseTicket = {
-                    stopSendingLocation() // Stop the location updates immediately
+                    stopCapturingImages()
                     closeSOSTicket(
                         onSuccess = {
                             isTicketClosed.value = true
@@ -60,75 +86,148 @@ class SOSActivity : ComponentActivity() {
                 isTicketClosed = isTicketClosed.value,
                 errorMessage = errorMessage.value
             )
-
-            startSendingLocationUpdates() // Start location updates when the SOSActivity is created
         }
     }
 
-    // Function to start sending location updates every 5 seconds
-    private fun startSendingLocationUpdates() {
-        isLocationUpdatesActive = true
-        val locationRunnable = object : Runnable {
-            override fun run() {
-                if (isLocationUpdatesActive) {
-                    if (sosTicketId != null) {
-                        Log.d("SOS_TICKET", "Sending new coordinates...")
+    private fun startCamera() {
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
 
-                        // Schedule the next location update after 5 seconds if still active
-                        handler.postDelayed(this, 5000)
-                    } else {
-                        Log.d("SOS_TICKET", "Ticket is closed, stopping location updates.")
-                        stopSendingLocation() // Stop if the ticket is closed
-                    }
+        cameraProviderFuture.addListener({
+            val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
+
+            // ImageCapture instance
+            imageCapture = ImageCapture.Builder()
+                .setTargetResolution(Size(1280, 720)) // Set a desired resolution
+                .build()
+
+            // Select back camera as a default
+            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+
+            try {
+                // Unbind any previous use cases before rebinding
+                cameraProvider.unbindAll()
+
+                // Bind use cases to the camera
+                cameraProvider.bindToLifecycle(
+                    this, cameraSelector, imageCapture
+                )
+
+                // Start image capture only after the camera is bound
+                startImageCapture()
+
+            } catch (exc: Exception) {
+                Log.e("CameraX", "Use case binding failed", exc)
+            }
+        }, ContextCompat.getMainExecutor(this))
+    }
+
+
+    private fun startImageCapture() {
+        isCapturingImages = true
+        val imageCaptureRunnable = object : Runnable {
+            override fun run() {
+                if (isCapturingImages) {
+                    captureImage()
+                    handler.postDelayed(this, captureInterval)
                 }
             }
         }
-
-        // Start the location updates
-        handler.post(locationRunnable)
+        handler.post(imageCaptureRunnable)
     }
 
-    // Function to stop sending location updates
-    private fun stopSendingLocation() {
-        isLocationUpdatesActive = false // Set the flag to false to stop further updates
-        handler.removeCallbacksAndMessages(null) // Remove any pending callbacks
-        Log.d("SOS_TICKET", "Stopped sending location updates")
+    private fun captureImage() {
+        val imageCapture = imageCapture ?: return
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val photoFile = File(externalMediaDirs.first(), "IMG_$timestamp.jpg")
+
+        val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+
+        imageCapture.takePicture(
+            outputOptions,
+            cameraExecutor,
+            object : ImageCapture.OnImageSavedCallback {
+                override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                    Log.d("CameraX", "Photo captured: ${photoFile.absolutePath}")
+                    val compressedFile = compressImage(photoFile)
+                    uploadImageToFirebase(compressedFile)
+                }
+
+                override fun onError(exception: ImageCaptureException) {
+                    Log.e("CameraX", "Photo capture failed: ${exception.message}", exception)
+                }
+            }
+        )
     }
 
-    // Function to close the SOS ticket
+    private fun compressImage(file: File): File {
+        val bitmap = BitmapFactory.decodeFile(file.absolutePath)
+        val targetSize = 500 * 1024 // 500 KB
+        var quality = 100
+        var compressedFile = file
+
+        do {
+            val byteArrayOutputStream = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.JPEG, quality, byteArrayOutputStream)
+            val compressedData = byteArrayOutputStream.toByteArray()
+
+            compressedFile = File(file.parent, "COMPRESSED_${file.name}")
+            FileOutputStream(compressedFile).use {
+                it.write(compressedData)
+                it.flush()
+            }
+
+            quality -= 5
+        } while (compressedFile.length() > targetSize && quality > 0)
+
+        Log.d("CameraX", "Image compressed to: ${compressedFile.length() / 1024} KB")
+        return compressedFile
+    }
+
+    private fun uploadImageToFirebase(file: File) {
+        val fileUri: Uri = Uri.fromFile(file)
+        val storageReference = FirebaseStorage.getInstance()
+            .getReference("emergency-images/${file.name}")
+        storageReference.putFile(fileUri)
+            .addOnSuccessListener {
+                Log.d("SOS_TICKET", "Image uploaded successfully to Firebase Storage.")
+            }
+            .addOnFailureListener {
+                Log.e("SOS_TICKET", "Failed to upload image: ${it.message}")
+            }
+    }
+
+    private fun stopCapturingImages() {
+        isCapturingImages = false
+        handler.removeCallbacksAndMessages(null)
+        Log.d("SOS_TICKET", "Stopped capturing images.")
+    }
+
     private fun closeSOSTicket(onSuccess: () -> Unit, onError: (String) -> Unit) {
-        val api = Api() // Your API instance
+        val api = Api()
         val firebaseUID = FirebaseAuth.getInstance().currentUser?.uid
-
-        // Fetch the active ticket ID before attempting to close it
         if (firebaseUID != null) {
             lifecycleScope.launch {
                 val activeTicketId = api.checkActiveTicket(firebaseUID)
-                Log.d("SOS_TICKET", "Active ticket ID fetched: $activeTicketId")
-
                 if (activeTicketId != null) {
-                    // Now that we have the active ticket ID, proceed to close it
-                    val success = api.closeTicket(
-                        firebaseUID = firebaseUID,
-                        ticketId = activeTicketId
-                    )
+                    val success = api.closeTicket(firebaseUID, activeTicketId)
                     if (success) {
-                        Log.d("SOS_TICKET", "SOS ticket closed successfully with ID: $activeTicketId")
-                        sosTicketId = null // Clear the stored ticket ID, if any
                         onSuccess()
                     } else {
-                        Log.e("SOS_TICKET", "Failed to close SOS ticket with ID: $activeTicketId")
                         onError("Failed to close the ticket.")
                     }
                 } else {
-                    Log.e("SOS_TICKET", "No active ticket found for Firebase UID: $firebaseUID")
                     onError("No active ticket found.")
                 }
             }
         } else {
-            Log.e("SOS_TICKET", "Cannot close ticket. Firebase UID is null.")
             onError("User is not logged in.")
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        cameraExecutor.shutdown()
+        stopCapturingImages()
     }
 }
 
@@ -187,7 +286,6 @@ fun SOSScreen(
                 )
             }
 
-            // Button to close the ticket and stop sending updates
             Button(
                 onClick = onCloseTicket,
                 modifier = Modifier.fillMaxWidth()
@@ -196,7 +294,7 @@ fun SOSScreen(
             }
 
             Button(
-                onClick = { /* You can define an action, like returning to the home screen */ },
+                onClick = { /* Handle action, e.g., navigate back */ },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 16.dp)
