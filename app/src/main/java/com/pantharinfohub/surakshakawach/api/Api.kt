@@ -7,6 +7,8 @@ import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.forms.*
 import io.ktor.client.request.get
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.*
@@ -277,4 +279,36 @@ class Api {
             return false
         }
     }
+
+//    suspend fun sendImages(ticketId: String, firebaseUID: String, imageUrls: List<String>): Boolean {
+//        val url = "https://surakshakawach-mobilebackend-192854867616.asia-south2.run.app/add-images" // Replace with the actual server URL
+//        val requestBody = AddImageRequest(ticketId, firebaseUID, imageUrls)
+//
+//        return try {
+//            val response: HttpResponse = client.post(url) {
+//                contentType(ContentType.Application.Json)
+//                setBody(requestBody)
+//            }
+//            response.status == HttpStatusCode.OK
+//        } catch (e: Exception) {
+//            println("Error sending images: ${e.message}")
+//            false
+//        }
+//    }
+//
+//    suspend fun sendAudioClips(ticketId: String, firebaseUID: String, clipUrls: List<String>): Boolean {
+//        val url = "https://surakshakawach-mobilebackend-192854867616.asia-south2.run.app/add-audio-clips" // Replace with the actual server URL
+//        val requestBody = AddAudioRequest(ticketId, firebaseUID, clipUrls)
+//
+//        return try {
+//            val response: HttpResponse = client.post(url) {
+//                contentType(ContentType.Application.Json)
+//                setBody(requestBody)
+//            }
+//            response.status == HttpStatusCode.OK
+//        } catch (e: Exception) {
+//            println("Error sending audio clips: ${e.message}")
+//            false
+//        }
+//    }
 }
