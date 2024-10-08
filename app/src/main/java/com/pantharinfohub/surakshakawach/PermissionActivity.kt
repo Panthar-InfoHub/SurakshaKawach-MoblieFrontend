@@ -58,9 +58,13 @@ class PermissionActivity : ComponentActivity() {
     private fun checkPermissions(): Boolean {
         val locationPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
         val contactPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS)
+        val cameraPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+        val audioPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
 
         return locationPermission == PackageManager.PERMISSION_GRANTED &&
-                contactPermission == PackageManager.PERMISSION_GRANTED
+                contactPermission == PackageManager.PERMISSION_GRANTED &&
+                cameraPermission == PackageManager.PERMISSION_GRANTED &&
+                audioPermission == PackageManager.PERMISSION_GRANTED
     }
 
     private fun requestPermissions() {
@@ -68,14 +72,21 @@ class PermissionActivity : ComponentActivity() {
             this, Manifest.permission.ACCESS_FINE_LOCATION)
         val shouldShowRationaleForContacts = ActivityCompat.shouldShowRequestPermissionRationale(
             this, Manifest.permission.READ_CONTACTS)
+        val shouldShowRationaleForCamera = ActivityCompat.shouldShowRequestPermissionRationale(
+            this, Manifest.permission.CAMERA)
+        val shouldShowRationaleForAudio = ActivityCompat.shouldShowRequestPermissionRationale(
+            this, Manifest.permission.RECORD_AUDIO)
 
-        if (shouldShowRationaleForLocation || shouldShowRationaleForContacts) {
+        if (shouldShowRationaleForLocation || shouldShowRationaleForContacts ||
+            shouldShowRationaleForCamera || shouldShowRationaleForAudio) {
             // In Compose, we'll handle this by showing the dialog
         } else {
             // Request permissions directly
             requestPermissionLauncher.launch(arrayOf(
                 Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.READ_CONTACTS
+                Manifest.permission.READ_CONTACTS,
+                Manifest.permission.CAMERA,
+                Manifest.permission.RECORD_AUDIO
             ))
         }
     }
@@ -84,8 +95,10 @@ class PermissionActivity : ComponentActivity() {
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
             val isLocationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
             val isContactGranted = permissions[Manifest.permission.READ_CONTACTS] ?: false
+            val isCameraGranted = permissions[Manifest.permission.CAMERA] ?: false
+            val isAudioGranted = permissions[Manifest.permission.RECORD_AUDIO] ?: false
 
-            if (isLocationGranted && isContactGranted) {
+            if (isLocationGranted && isContactGranted && isCameraGranted && isAudioGranted) {
                 // Permissions granted, navigate to HomeActivity
                 navigateToHome()
             } else {
@@ -109,7 +122,7 @@ class PermissionActivity : ComponentActivity() {
                 Text(text = "Permissions Required")
             },
             text = {
-                Text("We need precise location and contacts access to provide the best experience.")
+                Text("We need precise location, contacts, camera, and audio access to provide the best experience.")
             },
             confirmButton = {
                 Button(onClick = onAllow) {

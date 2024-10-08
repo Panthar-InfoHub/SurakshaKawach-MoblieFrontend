@@ -1,9 +1,13 @@
 package com.pantharinfohub.surakshakawach
 
 import android.Manifest
+import android.app.Activity
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -30,14 +34,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.core.content.ContextCompat.startActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.storage.FirebaseStorage
 import com.pantharinfohub.surakshakawach.api.Api
+import io.ktor.utils.io.errors.IOException
 import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -55,6 +62,10 @@ class SOSActivity : ComponentActivity() {
     private var imageCapture: ImageCapture? = null
     private lateinit var cameraExecutor: ExecutorService
     private val captureInterval: Long = 30000 // Capture every 30 seconds
+    private var mediaRecorder: MediaRecorder? = null
+    private var isRecordingAudio = false
+    private val audioRecordingInterval: Long = 30000 // 30 seconds interval
+    private val audioRecordingDuration: Long = 15000 // 15 seconds duration
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -87,7 +98,83 @@ class SOSActivity : ComponentActivity() {
                 errorMessage = errorMessage.value
             )
         }
+
+        // Start the audio recording at intervals
+        startAudioRecordingAtIntervals()
     }
+
+    private fun startAudioRecordingAtIntervals() {
+        val audioRecordingRunnable = object : Runnable {
+            override fun run() {
+                if (isRecordingAudio) {
+                    startAudioRecording()
+                    // Stop recording after the duration
+                    handler.postDelayed({ stopAudioRecording() }, audioRecordingDuration)
+                    // Schedule next audio recording after the interval
+                    handler.postDelayed(this, audioRecordingInterval)
+                }
+            }
+        }
+        isRecordingAudio = true
+        handler.post(audioRecordingRunnable)
+    }
+
+    private fun startAudioRecording() {
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val audioFile = File(externalMediaDirs.first(), "AUDIO_$timestamp.mp3")
+
+        mediaRecorder = MediaRecorder().apply {
+            setAudioSource(MediaRecorder.AudioSource.MIC)
+            setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+            setOutputFile(audioFile.absolutePath)
+            setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+            try {
+                prepare()
+                start()
+                Log.d("SOSActivity", "Audio recording started: ${audioFile.absolutePath}")
+            } catch (e: IOException) {
+                Log.e("SOSActivity", "Audio recording failed: ${e.message}")
+            }
+        }
+
+        // Schedule upload after the recording stops
+        handler.postDelayed({
+            stopAudioRecording()
+            uploadAudioToFirebase(audioFile)
+        }, audioRecordingDuration)
+    }
+    private fun uploadAudioToFirebase(audioFile: File) {
+        val fileUri: Uri = Uri.fromFile(audioFile)
+        val storageReference = FirebaseStorage.getInstance()
+            .getReference("emergency-audio/${audioFile.name}")
+
+        storageReference.putFile(fileUri)
+            .addOnSuccessListener {
+                Log.d("SOS_TICKET", "Audio uploaded successfully to Firebase Storage.")
+                // Optionally, you can delete the local file after upload
+                audioFile.delete()
+            }
+            .addOnFailureListener {
+                Log.e("SOS_TICKET", "Failed to upload audio: ${it.message}")
+            }
+    }
+
+
+    private fun stopAudioRecording() {
+        mediaRecorder?.apply {
+            stop()
+            release()
+        }
+        mediaRecorder = null
+        Log.d("SOSActivity", "Audio recording stopped.")
+    }
+
+    private fun stopAudioRecordingAtIntervals() {
+        isRecordingAudio = false
+        handler.removeCallbacksAndMessages(null)
+        stopAudioRecording()
+    }
+
 
     private fun startCamera() {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
@@ -228,6 +315,7 @@ class SOSActivity : ComponentActivity() {
         super.onDestroy()
         cameraExecutor.shutdown()
         stopCapturingImages()
+        stopAudioRecordingAtIntervals()
     }
 }
 
@@ -237,6 +325,9 @@ fun SOSScreen(
     isTicketClosed: Boolean,
     errorMessage: String?
 ) {
+    val context = LocalContext.current
+
+
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
@@ -294,13 +385,35 @@ fun SOSScreen(
             }
 
             Button(
-                onClick = { /* Handle action, e.g., navigate back */ },
+                onClick = {
+                    stopUpdatingCoordinates()
+                    navigateToHome(context) // Method to navigate back to HomeActivity
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 16.dp)
             ) {
                 Text(text = "Go Back to Home")
             }
+
         }
+    }
+}
+private val coordinateUpdateHandler = Handler(Looper.getMainLooper())
+
+private fun stopUpdatingCoordinates() {
+    coordinateUpdateHandler.removeCallbacksAndMessages(null)
+    Log.d("SOSActivity", "Stopped sending coordinates updates.")
+}
+
+
+// Updated navigateToHome function with context parameter
+private fun navigateToHome(context: Context) {
+    val intent = Intent(context, HomeActivity::class.java)
+    context.startActivity(intent)
+
+    // Cast context to Activity to call finish()
+    if (context is Activity) {
+        context.finish()
     }
 }

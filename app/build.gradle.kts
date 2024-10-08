@@ -99,4 +99,5 @@ dependencies {
     implementation(libs.ktor.serialization.kotlinx.json)
     implementation(libs.kotlinx.serialization.json)
     implementation (libs.android.maps.utils)
+    implementation (libs.firebase.storage)
 }
