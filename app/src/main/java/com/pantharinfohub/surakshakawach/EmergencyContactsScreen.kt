@@ -1,11 +1,14 @@
 package com.pantharinfohub.surakshakawach
 
+import android.content.Context
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.launch
 import com.pantharinfohub.surakshakawach.api.Api
+import kotlinx.coroutines.CoroutineScope
 
 @Composable
 fun EmergencyContactsScreen() {
@@ -47,55 +51,48 @@ fun EmergencyContactsScreen() {
 
     // Fetch emergency contacts from the server
     LaunchedEffect(Unit) {
-        coroutineScope.launch {
-            try {
-                val userProfileResponse = Api().getUserProfile(firebaseUID)
-                if (userProfileResponse != null) {
-                    // Extract emergency contacts from UserData inside the response's data
-                    emergencyContacts = userProfileResponse.data.emergencyContacts ?: emptyList()
-                } else {
-                    Toast.makeText(context, "Failed to load contacts", Toast.LENGTH_SHORT).show()
-                }
-            } catch (e: Exception) {
-                Log.e("API_ERROR", "Error fetching contacts: ${e.localizedMessage}")
-                Toast.makeText(context, "Error fetching contacts", Toast.LENGTH_SHORT).show()
-            }
+        loadContacts(firebaseUID, context, coroutineScope) { contacts ->
+            emergencyContacts = contacts
         }
     }
 
-
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.White)
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Top
+            .padding(16.dp)
     ) {
-        Text(
-            text = "Emergency Contacts",
-            style = MaterialTheme.typography.headlineMedium.copy(
-                fontWeight = FontWeight.Bold
-            ),
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
-
-        // Button to add a new contact, which will open the popup
-        Button(
-            onClick = { showDialog = true },
-            modifier = Modifier.padding(bottom = 16.dp)
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Top
         ) {
-            Text(text = "Add Emergency Contact")
-        }
+            Text(
+                text = "Emergency Contacts",
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontWeight = FontWeight.Bold
+                ),
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
 
-        // Display contacts in a list
-        LazyColumn {
-            items(emergencyContacts.size) { index ->
-                val contact = emergencyContacts[index]
-                ContactCard(contact)
+            // Display contacts in a list
+            LazyColumn {
+                items(emergencyContacts.size) { index ->
+                    val contact = emergencyContacts[index]
+                    ContactCard(contact)
+                }
             }
         }
 
+        // FAB for adding a new contact
+        FloatingActionButton(
+            onClick = { showDialog = true },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp)
+        ) {
+            Icon(Icons.Default.Add, contentDescription = "Add Emergency Contact")
+        }
 
         // Popup dialog for adding a new contact
         if (showDialog) {
@@ -146,6 +143,8 @@ fun EmergencyContactsScreen() {
                                             "Contact added successfully",
                                             Toast.LENGTH_SHORT
                                         ).show()
+                                        // Add the new contact to the list and update state
+                                        emergencyContacts = emergencyContacts + EmergencyContact(name, email, mobile)
                                         // Reset fields and close the dialog
                                         name = ""
                                         email = ""
@@ -181,6 +180,29 @@ fun EmergencyContactsScreen() {
         }
     }
 }
+
+// Function to load contacts
+private fun loadContacts(
+    firebaseUID: String,
+    context: Context,
+    coroutineScope: CoroutineScope,
+    onSuccess: (List<EmergencyContact>) -> Unit
+) {
+    coroutineScope.launch {
+        try {
+            val userProfileResponse = Api().getUserProfile(firebaseUID)
+            if (userProfileResponse != null) {
+                onSuccess(userProfileResponse.data.emergencyContacts ?: emptyList())
+            } else {
+                Toast.makeText(context, "Failed to load contacts", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            Log.e("API_ERROR", "Error fetching contacts: ${e.localizedMessage}")
+            Toast.makeText(context, "Error fetching contacts", Toast.LENGTH_SHORT).show()
+        }
+    }
+}
+
 
 @Composable
 fun ContactCard(contact: EmergencyContact) {
