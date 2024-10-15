@@ -76,6 +76,8 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
     var isDrawerVisible by remember { mutableStateOf(false) } // Control the visibility of the drawer
     val coroutineScope = rememberCoroutineScope()
     var isUpdatingLocation = false
+    var countdownTimer: CountDownTimer? = null
+    var isSOSCanceled by remember { mutableStateOf(false) }
 
 
     // State for modal dialog
@@ -184,22 +186,35 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
         }
     }
 
+    // Initialize the LocationCallback
+    val locationCallback = object : LocationCallback() {
+        override fun onLocationResult(locationResult: LocationResult) {
+            locationResult.lastLocation?.let { location ->
+                currentLocation = LatLng(location.latitude, location.longitude) // Update current location
+                Log.d("SOS_TICKET", "Location update: ${location.latitude}, ${location.longitude}")
+                // Send location to the server if SOS is active
+                if (isUpdatingLocation) {
+                    coroutineScope.launch {
+                        handleSOSTicket(firebaseUID ?: return@launch, location.latitude.toString(), location.longitude.toString(), getCurrentTimestamp())
+                    }
+                }
+            }
+        }
+    }
+
+    // Location updates request
     fun requestLocationUpdates(fusedLocationClient: FusedLocationProviderClient) {
         fusedLocationClient.requestLocationUpdates(
             locationRequest,
             object : LocationCallback() {
                 override fun onLocationResult(locationResult: LocationResult) {
-                    val location = locationResult.lastLocation ?: return
-                    val latitude = location.latitude
-                    val longitude = location.longitude
-                    val timestamp = getCurrentTimestamp()
-
-                    currentLocation = LatLng(latitude, longitude)
-                    Log.d("SOS_TICKET", "New location: Latitude $latitude, Longitude $longitude")
-
-                    if (isUpdatingLocation) {
-                        coroutineScope.launch {
-                            handleSOSTicket(firebaseUID, latitude.toString(), longitude.toString(), timestamp)
+                    locationResult.lastLocation?.let {
+                        val timestamp = getCurrentTimestamp()
+                        currentLocation = LatLng(it.latitude, it.longitude)
+                        if (isUpdatingLocation) {
+                            coroutineScope.launch {
+                                handleSOSTicket(firebaseUID, it.latitude.toString(), it.longitude.toString(), timestamp)
+                            }
                         }
                     }
                 }
@@ -208,32 +223,55 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
         )
     }
 
+    // Function to start sending location updates if not already active
     val startSendingLocation = {
         if (!isUpdatingLocation) {
             isUpdatingLocation = true
-            requestLocationUpdates(fusedLocationClient)
+            requestLocationUpdates(fusedLocationClient) // Start requesting location updates.
         }
     }
 
+    // Function to stop sending location updates
     val stopSendingLocation = {
-        isUpdatingLocation = false
-        fusedLocationClient.removeLocationUpdates(object : LocationCallback() {})
-        Log.d("SOS_TICKET", "Stopped sending location updates")
+        if (isUpdatingLocation) {
+            isUpdatingLocation = false
+            fusedLocationClient.removeLocationUpdates(locationCallback) // Stop location updates.
+            Log.d("SOS_TICKET", "Stopped sending location updates")
+        }
     }
 
+
+    // Function to cancel SOS
+    val cancelSOS = {
+        countdownTimer?.cancel() // Cancel the timer
+        stopSendingLocation() // Stop sending location updates
+        isSOSCanceled = true // Mark SOS as canceled
+        showModal = false // Close the modal
+        Log.d("SOS_TICKET", "SOS canceled")
+    }
+
+
+    // Launch SOS activity and start sending location
     val sendSOSTicketAndOpenActivity = {
-        startSendingLocation()
-        context.startActivity(Intent(context, SOSActivity::class.java))
+        if (!isSOSCanceled) { // Only proceed if SOS is not canceled
+            startSendingLocation()
+            context.startActivity(Intent(context, SOSActivity::class.java))
+        }
     }
 
+    // Start the countdown timer
     fun startTimer() {
-        object : CountDownTimer(5000, 1000) {
+        countdownTimer?.cancel()
+        isSOSCanceled = false // Reset the cancel flag
+        countdownTimer = object : CountDownTimer(5000, 1000) {
             override fun onTick(millisUntilFinished: Long) {
                 countdown = (millisUntilFinished / 1000).toInt()
             }
 
             override fun onFinish() {
-                sendSOSTicketAndOpenActivity()
+                if (!isSOSCanceled) {
+                    sendSOSTicketAndOpenActivity()
+                }
             }
         }.start()
     }
@@ -343,6 +381,7 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
                     dismissButton = {
                         Button(onClick = {
                             // Cancel: Just close the modal
+                            cancelSOS()
                             showModal = false
                         }) {
                             Text("Cancel")
