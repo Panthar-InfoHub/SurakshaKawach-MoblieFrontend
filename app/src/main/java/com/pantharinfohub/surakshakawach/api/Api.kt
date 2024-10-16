@@ -4,6 +4,8 @@ import android.util.Log
 import com.pantharinfohub.surakshakawach.UserProfileResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.plugins.ClientRequestException
+import io.ktor.client.plugins.ServerResponseException
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.forms.*
 import io.ktor.client.request.get
@@ -17,14 +19,17 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
-class Api {
-
-    // Initialize Ktor client with content negotiation plugin
-    private val client = HttpClient {
-        install(ContentNegotiation) {
-            json() // JSON will still be used if needed elsewhere
-        }
+val client = HttpClient {
+    install(ContentNegotiation) {
+        json(Json {
+            ignoreUnknownKeys = true
+            prettyPrint = true
+            isLenient = true
+        })
     }
+}
+
+class Api {
 
     suspend fun createUser(
         firebaseUID: String,
@@ -134,7 +139,6 @@ class Api {
             Log.d("SOS_TICKET", "Server responded with status code: $statusCode and body: $responseBody")
 
             if (statusCode.isSuccess()) {
-                // Check if the response body is not empty before parsing
                 if (responseBody.isNotEmpty()) {
                     val json = Json.parseToJsonElement(responseBody).jsonObject
                     val ticketId = json["ticketId"]?.jsonPrimitive?.content
@@ -158,8 +162,12 @@ class Api {
             } else {
                 Log.e("SOS_TICKET", "Failed to create SOS ticket: ${statusCode.value}")
             }
+        } catch (e: ClientRequestException) {
+            Log.e("SOS_TICKET", "Client request error: ${e.localizedMessage}")
+        } catch (e: ServerResponseException) {
+            Log.e("SOS_TICKET", "Server response error: ${e.localizedMessage}")
         } catch (e: Exception) {
-            Log.e("SOS_TICKET", "Error creating SOS ticket: ${e.localizedMessage}")
+            Log.e("SOS_TICKET", "Unexpected error creating SOS ticket: ${e.localizedMessage}")
         }
         return null
     }
@@ -174,7 +182,7 @@ class Api {
             val response: HttpResponse = client.get(url) {
                 url {
                     parameters.append("firebaseUID", firebaseUID)
-                    parameters.append("timestamp", timestamp) // Adjust based on how you identify the ticket
+                    parameters.append("timestamp", timestamp)
                 }
             }
 
@@ -184,8 +192,7 @@ class Api {
             Log.d("SOS_TICKET", "GET request responded with status code: $statusCode and body: $responseBody")
 
             if (statusCode.isSuccess() && responseBody.isNotEmpty()) {
-                val json = Json.parseToJsonElement(responseBody).jsonObject
-                return Json.decodeFromString<TicketDetailsResponse>(responseBody)
+                return Json.decodeFromString(responseBody)
             }
         } catch (e: Exception) {
             Log.e("SOS_TICKET", "Error retrieving ticket details: ${e.localizedMessage}")
@@ -280,22 +287,37 @@ class Api {
         }
     }
 
-//    suspend fun sendImages(ticketId: String, firebaseUID: String, imageUrls: List<String>): Boolean {
-//        val url = "https://surakshakawach-mobilebackend-192854867616.asia-south2.run.app/add-images" // Replace with the actual server URL
-//        val requestBody = AddImageRequest(ticketId, firebaseUID, imageUrls)
-//
-//        return try {
-//            val response: HttpResponse = client.post(url) {
-//                contentType(ContentType.Application.Json)
-//                setBody(requestBody)
-//            }
-//            response.status == HttpStatusCode.OK
-//        } catch (e: Exception) {
-//            println("Error sending images: ${e.message}")
-//            false
-//        }
-//    }
-//
+    suspend fun sendImages(ticketId: String, firebaseUID: String, imageUrls: List<String>): Boolean {
+        val url = "https://surakshakawach-mobilebackend-192854867616.asia-south2.run.app/api/v1/ticket/add-images"
+        val requestBody = AddImageRequest(ticketId, firebaseUID, imageUrls)
+
+        return try {
+            val response: HttpResponse = client.post(url) {
+                contentType(ContentType.Application.Json)
+                setBody(requestBody)  // Serializing the AddImageRequest object to JSON
+            }
+
+            if (response.status == HttpStatusCode.OK) {
+                Log.d("API_SEND_IMAGES", "Image URLs sent successfully. Status: ${response.status}")
+                true
+            } else {
+                Log.e("API_SEND_IMAGES", "Failed to send images. Status: ${response.status}")
+                false
+            }
+        } catch (e: ClientRequestException) {
+            Log.e("API_SEND_IMAGES", "Client request error: ${e.localizedMessage}", e)
+            false
+        } catch (e: ServerResponseException) {
+            Log.e("API_SEND_IMAGES", "Server response error: ${e.localizedMessage}", e)
+            false
+        } catch (e: Exception) {
+            Log.e("API_SEND_IMAGES", "Unexpected error: ${e.localizedMessage}", e)
+            false
+        }
+    }
+
+
+
 //    suspend fun sendAudioClips(ticketId: String, firebaseUID: String, clipUrls: List<String>): Boolean {
 //        val url = "https://surakshakawach-mobilebackend-192854867616.asia-south2.run.app/add-audio-clips" // Replace with the actual server URL
 //        val requestBody = AddAudioRequest(ticketId, firebaseUID, clipUrls)

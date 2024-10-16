@@ -4,36 +4,14 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.CountDownTimer
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -52,10 +30,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavHostController
 import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.LocationCallback
-import com.google.android.gms.location.LocationRequest
-import com.google.android.gms.location.LocationResult
-import com.google.android.gms.location.Priority
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.firebase.auth.FirebaseAuth
@@ -71,210 +45,123 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocationProviderClient) {
-    var currentLocation by remember { mutableStateOf(LatLng(25.4484, 78.5685)) } // Default to Jhansi
+    var currentLocation by remember {
+        mutableStateOf(
+            LatLng(
+                25.4484,
+                78.5685
+            )
+        )
+    } // Default to Jhansi
     var hasLocationPermission by remember { mutableStateOf(false) }
-    var isDrawerVisible by remember { mutableStateOf(false) } // Control the visibility of the drawer
-    val coroutineScope = rememberCoroutineScope()
-    var isUpdatingLocation = false
-    var countdownTimer: CountDownTimer? = null
-    var isSOSCanceled by remember { mutableStateOf(false) }
-
-
-    // State for modal dialog
+    var isDrawerVisible by remember { mutableStateOf(false) }
     var showModal by remember { mutableStateOf(false) }
     var countdown by remember { mutableIntStateOf(3) }
+    var isSOSCanceled by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+    var countdownTimer: CountDownTimer? = null
 
-    // Handler for periodic location updates
-    val handler = remember { Handler(Looper.getMainLooper()) }
-    val locationRequest = LocationRequest.create().apply {
-        interval = 5000 // Adjust interval as needed
-        fastestInterval = 2000
-        priority = Priority.PRIORITY_HIGH_ACCURACY
-    }
+    var isRequestSent by remember { mutableStateOf(false) }
 
-    // Get the current user's Firebase UID
+    // Firebase UID
     val firebaseAuth = FirebaseAuth.getInstance()
     val firebaseUID = firebaseAuth.currentUser?.uid
 
     // Store ticket ID after the first ticket is created
     var sosTicketId: String? = null
-
-    if (firebaseUID == null) {
-        Log.e("SOS_TICKET", "User not logged in or Firebase UID is null")
-        return // Early exit if the user is not logged in
-    }
-
-    // Request location permission if not granted
     val context = LocalContext.current
+
+    // Request permission for location
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
-            // Permission is granted, get the last known location
             fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                location?.let {
-                    currentLocation = LatLng(it.latitude, it.longitude)
-                }
+                location?.let { currentLocation = LatLng(it.latitude, it.longitude) }
             }
         } else {
-            Log.e("LocationPermission", "Location permission denied by the user")
-            // Show a message to the user or handle the lack of location permission gracefully
+            Log.e("LocationPermission", "Permission denied")
         }
     }
 
-// Check permission and request if not already granted
+    // Check if permission is granted
     LaunchedEffect(Unit) {
         hasLocationPermission = ContextCompat.checkSelfPermission(
             context, Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
 
-        if (hasLocationPermission) {
-            // Permission already granted, get the last known location
-            fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                location?.let {
-                    currentLocation = LatLng(it.latitude, it.longitude)
-                }
-            }
-        } else {
-            // Request location permission
+        if (!hasLocationPermission) {
             permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
         }
     }
 
+    // Function to handle SOS ticket creation
+    suspend fun handleSOSTicket(firebaseUID: String?) {
+        if (firebaseUID.isNullOrEmpty()) {
+            Log.e("SOS_TICKET", "Firebase UID is null or empty.")
+            return
+        }
 
-
-    // Define the camera position based on current location
-    val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(currentLocation, 14f) // Set zoom level to 14
-    }
-
-    suspend fun handleSOSTicket(
-        firebaseUID: String,
-        latitude: String,
-        longitude: String,
-        timestamp: String
-    ) {
         val api = Api()
-        sosTicketId = sosTicketId ?: api.checkActiveTicket(firebaseUID)
+        sosTicketId = api.checkActiveTicket(firebaseUID)
 
         if (sosTicketId == null) {
-            val ticketId = api.sendSosTicket(
+            val timestamp = getCurrentTimestamp()
+            sosTicketId = api.sendSosTicket(
                 firebaseUID = firebaseUID,
-                latitude = latitude,
-                longitude = longitude,
+                latitude = currentLocation.latitude.toString(),
+                longitude = currentLocation.longitude.toString(),
                 timestamp = timestamp
             )
-            if (ticketId != null) {
-                sosTicketId = ticketId
-                Log.d("SOS_TICKET", "New SOS ticket created with ID: $ticketId")
+            if (sosTicketId != null) {
+                Log.d("SOS_TICKET", "New SOS ticket created: $sosTicketId")
             } else {
-                Log.e("SOS_TICKET", "Failed to create a new SOS ticket")
+                Log.e("SOS_TICKET", "Failed to create SOS ticket.")
             }
         } else {
-            val success = api.updateCoordinates(
-                firebaseUID = firebaseUID,
-                ticketId = sosTicketId!!,
-                latitude = latitude,
-                longitude = longitude,
-                timestamp = timestamp
-            )
-            if (success) {
-                Log.d("SOS_TICKET", "Coordinates updated for ticket ID: $sosTicketId")
-            } else {
-                Log.e("SOS_TICKET", "Failed to update coordinates for ticket ID: $sosTicketId")
-            }
-        }
-    }
-
-    // Initialize the LocationCallback
-    val locationCallback = object : LocationCallback() {
-        override fun onLocationResult(locationResult: LocationResult) {
-            locationResult.lastLocation?.let { location ->
-                currentLocation = LatLng(location.latitude, location.longitude) // Update current location
-                Log.d("SOS_TICKET", "Location update: ${location.latitude}, ${location.longitude}")
-                // Send location to the server if SOS is active
-                if (isUpdatingLocation) {
-                    coroutineScope.launch {
-                        handleSOSTicket(firebaseUID ?: return@launch, location.latitude.toString(), location.longitude.toString(), getCurrentTimestamp())
-                    }
-                }
-            }
-        }
-    }
-
-    // Location updates request
-    fun requestLocationUpdates(fusedLocationClient: FusedLocationProviderClient) {
-        fusedLocationClient.requestLocationUpdates(
-            locationRequest,
-            object : LocationCallback() {
-                override fun onLocationResult(locationResult: LocationResult) {
-                    locationResult.lastLocation?.let {
-                        val timestamp = getCurrentTimestamp()
-                        currentLocation = LatLng(it.latitude, it.longitude)
-                        if (isUpdatingLocation) {
-                            coroutineScope.launch {
-                                handleSOSTicket(firebaseUID, it.latitude.toString(), it.longitude.toString(), timestamp)
-                            }
-                        }
-                    }
-                }
-            },
-            Looper.getMainLooper()
-        )
-    }
-
-    // Function to start sending location updates if not already active
-    val startSendingLocation = {
-        if (!isUpdatingLocation) {
-            isUpdatingLocation = true
-            requestLocationUpdates(fusedLocationClient) // Start requesting location updates.
-        }
-    }
-
-    // Function to stop sending location updates
-    val stopSendingLocation = {
-        if (isUpdatingLocation) {
-            isUpdatingLocation = false
-            fusedLocationClient.removeLocationUpdates(locationCallback) // Stop location updates.
-            Log.d("SOS_TICKET", "Stopped sending location updates")
+            Log.d("SOS_TICKET", "Active ticket found: $sosTicketId")
         }
     }
 
 
-    // Function to cancel SOS
-    val cancelSOS = {
-        countdownTimer?.cancel() // Cancel the timer
-        stopSendingLocation() // Stop sending location updates
-        isSOSCanceled = true // Mark SOS as canceled
-        showModal = false // Close the modal
-        Log.d("SOS_TICKET", "SOS canceled")
-    }
-
-
-    // Launch SOS activity and start sending location
-    val sendSOSTicketAndOpenActivity = {
-        if (!isSOSCanceled) { // Only proceed if SOS is not canceled
-            startSendingLocation()
-            context.startActivity(Intent(context, SOSActivity::class.java))
-        }
-    }
-
-    // Start the countdown timer
+    // Start the countdown timer and navigate to SOSActivity
     fun startTimer() {
-        countdownTimer?.cancel()
-        isSOSCanceled = false // Reset the cancel flag
+        countdown = 5 // Reset countdown
+        isSOSCanceled = false // Reset cancel flag
+
         countdownTimer = object : CountDownTimer(5000, 1000) {
             override fun onTick(millisUntilFinished: Long) {
                 countdown = (millisUntilFinished / 1000).toInt()
             }
 
             override fun onFinish() {
-                if (!isSOSCanceled) {
-                    sendSOSTicketAndOpenActivity()
+                if (!isSOSCanceled && !isRequestSent) {
+                    isRequestSent = true // Set flag to prevent further requests
+                    coroutineScope.launch {
+                        handleSOSTicket(firebaseUID ?: return@launch)
+                        val intent = Intent(context, SOSActivity::class.java)
+                        intent.putExtra("sosTicketId", sosTicketId)
+                        context.startActivity(intent)
+                    }
                 }
             }
         }.start()
     }
+
+    // Function to manually trigger SOS after "Confirm"
+    fun sendSOSManually() {
+        if (!isRequestSent) {
+            isRequestSent = true // Set flag to prevent further requests
+            countdownTimer?.cancel() // Cancel the countdown timer if confirm is pressed early
+            coroutineScope.launch {
+                handleSOSTicket(firebaseUID ?: return@launch)
+                val intent = Intent(context, SOSActivity::class.java)
+                intent.putExtra("sosTicketId", sosTicketId)
+                context.startActivity(intent)
+            }
+        }
+    }
+
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Main content
@@ -293,7 +180,8 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = { // Navigate to the DashboardScreen using NavController
-                    navController.navigate("dashboard")  }) {
+                    navController.navigate("dashboard")
+                }) {
                     Icon(
                         painter = painterResource(id = R.drawable.ic_profile), // Replace with your icon resource
                         contentDescription = "Profile",
@@ -301,7 +189,12 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
                         modifier = Modifier.size(58.dp)
                     )
                 }
-                Text(text = "Suraksha Kawach", color = Color.Black, modifier = Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.headlineSmall )
+                Text(
+                    text = "Suraksha Kawach",
+                    color = Color.Black,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    style = MaterialTheme.typography.headlineSmall
+                )
                 IconButton(onClick = {
                     isDrawerVisible = !isDrawerVisible // Toggle the drawer visibility
                 }) {
@@ -329,7 +222,9 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
                 ) {
                     GoogleMap(
                         modifier = Modifier.fillMaxSize(),
-                        cameraPositionState = cameraPositionState,
+                        cameraPositionState = rememberCameraPositionState {
+                            position = CameraPosition.fromLatLngZoom(currentLocation, 14f)
+                        },
                         uiSettings = MapUiSettings(zoomControlsEnabled = false)
                     )
                 }
@@ -372,23 +267,24 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
                     },
                     confirmButton = {
                         Button(onClick = {
-                            // Confirm: Send SOS and navigate to SOS activity
-                            sendSOSTicketAndOpenActivity()
+                            sendSOSManually() // Call manual SOS sending function on confirm
                         }) {
                             Text("Confirm")
                         }
                     },
                     dismissButton = {
                         Button(onClick = {
-                            // Cancel: Just close the modal
-                            cancelSOS()
+                            isSOSCanceled = true // Cancel the SOS process
                             showModal = false
+                            countdownTimer?.cancel() // Cancel the timer on cancel
+                            isRequestSent = false // Reset the request flag if the user cancels
                         }) {
                             Text("Cancel")
                         }
                     }
                 )
             }
+
 
             // Favourites section
             Box(
@@ -410,17 +306,23 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
                         Image(
                             painter = painterResource(id = R.drawable.avatar1), // Replace with your avatar resource
                             contentDescription = "Avatar 1",
-                            modifier = Modifier.size(100.dp).padding(end = 20.dp)
+                            modifier = Modifier
+                                .size(100.dp)
+                                .padding(end = 20.dp)
                         )
                         Image(
                             painter = painterResource(id = R.drawable.avatar2), // Replace with your avatar resource
                             contentDescription = "Avatar 2",
-                            modifier = Modifier.size(100.dp).padding(end = 20.dp)
+                            modifier = Modifier
+                                .size(100.dp)
+                                .padding(end = 20.dp)
                         )
                         Image(
                             painter = painterResource(id = R.drawable.avatar3), // Replace with your avatar resource
                             contentDescription = "Avatar 3",
-                            modifier = Modifier.size(100.dp).padding(start = 16.dp)
+                            modifier = Modifier
+                                .size(100.dp)
+                                .padding(start = 16.dp)
                         )
                     }
                 }
@@ -495,7 +397,7 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
     }
 }
 
-// Function to get the current timestamp
+// Function to get current timestamp
 fun getCurrentTimestamp(): String {
     val sdf = SimpleDateFormat("dd MMMM yyyy", Locale.getDefault())
     return sdf.format(Date())

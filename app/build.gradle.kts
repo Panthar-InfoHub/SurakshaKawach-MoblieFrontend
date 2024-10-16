@@ -72,6 +72,7 @@ dependencies {
     implementation(libs.firebase.storage.ktx)
     implementation (libs.androidx.camera.extensions)
     implementation (libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.view)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
