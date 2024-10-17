@@ -66,9 +66,9 @@ class SOSActivity : ComponentActivity() {
     private var imageCapture: ImageCapture? = null
     private val handler = Handler(Looper.getMainLooper())
     private var sosTicketId: String? = null
-    private val captureInterval: Long = 30000 // Capture every 30 seconds
+    private val captureInterval: Long = 60000 // Capture every 60 seconds
     private var isRecordingAudio = false
-    private val audioRecordingInterval: Long = 30000 // 30 seconds interval
+    private val audioRecordingInterval: Long = 60000 // 60 seconds interval
     private val audioRecordingDuration: Long = 15000 // 15 seconds duration
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private var isCapturingImages = false
@@ -208,7 +208,7 @@ class SOSActivity : ComponentActivity() {
 
             // ImageCapture instance
             imageCapture = ImageCapture.Builder()
-                .setTargetResolution(Size(1280, 720)) // Set a desired resolution
+                .setTargetResolution(Size(1080, 1080)) // Set a desired resolution
                 .build()
 
             // Select back camera as a default
@@ -274,7 +274,7 @@ class SOSActivity : ComponentActivity() {
 
     private fun compressImage(file: File): File {
         val bitmap = BitmapFactory.decodeFile(file.absolutePath)
-        val targetSize = 500 * 1024 // 500 KB
+        val targetSize = 100 * 1024 // 100 KB
         var quality = 100
         var compressedFile = file
 

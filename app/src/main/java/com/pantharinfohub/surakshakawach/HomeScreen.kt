@@ -138,10 +138,14 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
                 if (!isSOSCanceled && !isRequestSent) {
                     isRequestSent = true // Set flag to prevent further requests
                     coroutineScope.launch {
-                        handleSOSTicket(firebaseUID ?: return@launch)
-                        val intent = Intent(context, SOSActivity::class.java)
-                        intent.putExtra("sosTicketId", sosTicketId)
-                        context.startActivity(intent)
+                        try {
+                            handleSOSTicket(firebaseUID ?: return@launch)
+                            val intent = Intent(context, SOSActivity::class.java)
+                            intent.putExtra("sosTicketId", sosTicketId)
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            Log.e("SOS", "Failed to send SOS request", e)
+                        }
                     }
                 }
             }
@@ -153,11 +157,16 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
         if (!isRequestSent) {
             isRequestSent = true // Set flag to prevent further requests
             countdownTimer?.cancel() // Cancel the countdown timer if confirm is pressed early
+
             coroutineScope.launch {
-                handleSOSTicket(firebaseUID ?: return@launch)
-                val intent = Intent(context, SOSActivity::class.java)
-                intent.putExtra("sosTicketId", sosTicketId)
-                context.startActivity(intent)
+                try {
+                    handleSOSTicket(firebaseUID ?: return@launch)
+                    val intent = Intent(context, SOSActivity::class.java)
+                    intent.putExtra("sosTicketId", sosTicketId)
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    Log.e("SOS", "Failed to send SOS request", e)
+                }
             }
         }
     }
