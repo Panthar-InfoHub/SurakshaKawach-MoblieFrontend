@@ -4,6 +4,7 @@ import com.pantharinfohub.surakshakawach.EmergencyContact
 import com.pantharinfohub.surakshakawach.RemoveEmergencyContactRequest
 import com.pantharinfohub.surakshakawach.UpdateEmergencyContactRequest
 import com.pantharinfohub.surakshakawach.UserProfileResponse
+import com.pantharinfohub.surakshakawach.api.AddAudioRequest
 import com.pantharinfohub.surakshakawach.api.AddImageRequest
 import com.pantharinfohub.surakshakawach.api.TicketDetailsResponse
 import io.ktor.client.HttpClient
@@ -322,21 +323,21 @@ class Api {
 
 
 
-//    suspend fun sendAudioClips(ticketId: String, firebaseUID: String, clipUrls: List<String>): Boolean {
-//        val url = "https://surakshakawach-mobilebackend-192854867616.asia-south2.run.app/add-audio-clips" // Replace with the actual server URL
-//        val requestBody = AddAudioRequest(ticketId, firebaseUID, clipUrls)
-//
-//        return try {
-//            val response: HttpResponse = client.post(url) {
-//                contentType(ContentType.Application.Json)
-//                setBody(requestBody)
-//            }
-//            response.status == HttpStatusCode.OK
-//        } catch (e: Exception) {
-//            println("Error sending audio clips: ${e.message}")
-//            false
-//        }
-//    }
+    suspend fun sendAudioClips(ticketId: String, firebaseUID: String, clipUrls: List<String>): Boolean {
+        val url = "https://surakshakawach-mobilebackend-192854867616.asia-south2.run.app/api/v1/ticket/add-audio-clips" // Replace with the actual server URL
+        val requestBody = AddAudioRequest(ticketId, firebaseUID, clipUrls)
+
+        return try {
+            val response: HttpResponse = client.post(url) {
+                contentType(ContentType.Application.Json)
+                setBody(requestBody)
+            }
+            response.status == HttpStatusCode.OK
+        } catch (e: Exception) {
+            println("Error sending audio clips: ${e.message}")
+            false
+        }
+    }
 
     // Function to update emergency contacts
     suspend fun updateEmergencyContacts(
@@ -391,20 +392,20 @@ class Api {
             }
 
             if (response.status.isSuccess()) {
-                Log.d("UPDATE_CONTACT", "Emergency contacts updated successfully.")
+                Log.d("REMOVE_CONTACT", "Emergency contacts removed successfully.")
                 true
             } else {
-                Log.e("UPDATE_CONTACT", "Failed to update emergency contacts. Status: ${response.status}")
+                Log.e("REMOVE_CONTACT", "Failed to remove emergency contacts. Status: ${response.status}")
                 false
             }
         } catch (e: ClientRequestException) {
-            Log.e("UPDATE_CONTACT", "Client request error: ${e.localizedMessage}")
+            Log.e("REMOVE_CONTACT", "Client request error: ${e.localizedMessage}")
             false
         } catch (e: ServerResponseException) {
-            Log.e("UPDATE_CONTACT", "Server response error: ${e.localizedMessage}")
+            Log.e("REMOVE_CONTACT", "Server response error: ${e.localizedMessage}")
             false
         } catch (e: Exception) {
-            Log.e("UPDATE_CONTACT", "Unexpected error: ${e.localizedMessage}")
+            Log.e("REMOVE_CONTACT", "Unexpected error: ${e.localizedMessage}")
             false
         }
     }
