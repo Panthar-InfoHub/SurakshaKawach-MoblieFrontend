@@ -360,6 +360,7 @@ class SOSActivity : ComponentActivity() {
     private fun startAudioRecording() {
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val audioFile = File(externalMediaDirs.first(), "AUDIO_$timestamp.mp3")
+        val firebaseUID = FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
         mediaRecorder = MediaRecorder().apply {
             setAudioSource(MediaRecorder.AudioSource.MIC)
@@ -377,11 +378,11 @@ class SOSActivity : ComponentActivity() {
 
         handler.postDelayed({
             stopAudioRecording()
-            uploadAudioToFirebase(audioFile)
+            uploadAudioToFirebase(audioFile, firebaseUID)
         }, audioRecordingDuration)
     }
 
-    private fun uploadAudioToFirebase(audioFile: File) {
+    private fun uploadAudioToFirebase(audioFile: File, firebaseUID: String) {
         val fileUri: Uri = Uri.fromFile(audioFile)
         val storageReference = FirebaseStorage.getInstance()
             .getReference("emergency-audio/${audioFile.name}")
@@ -389,14 +390,42 @@ class SOSActivity : ComponentActivity() {
         storageReference.putFile(fileUri)
             .addOnSuccessListener {
                 Log.d("SOS_TICKET", "Audio uploaded successfully to Firebase Storage.")
-                audioFile.delete()
+
+                // Get the audio file URL from Firebase
+                storageReference.downloadUrl.addOnSuccessListener { uri ->
+                    val audioUrl = uri.toString()
+                    // Update the backend with the audio clip URL
+                    sendClipsUrlToBackend(firebaseUID, listOf(audioUrl))
+                    audioFile.delete()
+                }.addOnFailureListener {
+                    Log.e("SOS_TICKET", "Failed to get audio URL: ${it.message}")
+                }
             }
             .addOnFailureListener {
                 Log.e("SOS_TICKET", "Failed to upload audio: ${it.message}")
             }
     }
 
+    private fun sendClipsUrlToBackend(firebaseUID: String, clipUrls: List<String>) {
+        if (sosTicketId != null) {
+            Log.d("SOS_TICKET", "Preparing to send audio clip URLs to backend. SOS Ticket ID: $sosTicketId")
 
+            lifecycleScope.launch {
+                try {
+                    val success = Api().sendAudioClips(sosTicketId!!, firebaseUID, clipUrls)
+                    if (success) {
+                        Log.d("SOS_TICKET", "Audio clip URLs sent successfully to the server")
+                    } else {
+                        Log.e("SOS_TICKET", "Failed to send audio clip URLs for ticket ID: $sosTicketId")
+                    }
+                } catch (e: Exception) {
+                    Log.e("SOS_TICKET", "Error while sending audio clip URLs: ${e.localizedMessage}", e)
+                }
+            }
+        } else {
+            Log.e("SOS_TICKET", "Cannot send audio clip URLs. SOS ticket ID is null.")
+        }
+    }
 
     private fun startUpdatingCoordinates() {
         val locationRequest = LocationRequest.create().apply {
