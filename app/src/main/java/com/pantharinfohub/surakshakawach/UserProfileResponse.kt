@@ -24,3 +24,16 @@ data class EmergencyContact(
     val email: String,
     val mobile: String
 )
+
+@Serializable
+data class UpdateEmergencyContactRequest(
+    val firebaseUID: String,
+    val old_contacts: List<EmergencyContact>,
+    val new_contacts: List<EmergencyContact>
+)
+
+@Serializable
+data class RemoveEmergencyContactRequest(
+    val firebaseUID: String,
+    val contact_details: List<EmergencyContact>
+)

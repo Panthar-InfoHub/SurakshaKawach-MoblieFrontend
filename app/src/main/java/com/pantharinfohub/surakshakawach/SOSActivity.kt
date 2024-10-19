@@ -1,5 +1,6 @@
 package com.pantharinfohub.surakshakawach
 
+import Api
 import android.Manifest
 import android.app.Activity
 import android.content.Context
@@ -48,7 +49,6 @@ import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.storage.FirebaseStorage
-import com.pantharinfohub.surakshakawach.api.Api
 import io.ktor.utils.io.errors.IOException
 import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
@@ -395,6 +395,8 @@ class SOSActivity : ComponentActivity() {
                 Log.e("SOS_TICKET", "Failed to upload audio: ${it.message}")
             }
     }
+
+
 
     private fun startUpdatingCoordinates() {
         val locationRequest = LocationRequest.create().apply {
