@@ -29,7 +29,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
-import com.pantharinfohub.surakshakawach.api.Api
+import Api
 import com.pantharinfohub.surakshakawach.ui.theme.PurpleGradient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

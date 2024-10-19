@@ -1,7 +1,11 @@
-package com.pantharinfohub.surakshakawach.api
 
 import android.util.Log
+import com.pantharinfohub.surakshakawach.EmergencyContact
+import com.pantharinfohub.surakshakawach.RemoveEmergencyContactRequest
+import com.pantharinfohub.surakshakawach.UpdateEmergencyContactRequest
 import com.pantharinfohub.surakshakawach.UserProfileResponse
+import com.pantharinfohub.surakshakawach.api.AddImageRequest
+import com.pantharinfohub.surakshakawach.api.TicketDetailsResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.ClientRequestException
@@ -120,7 +124,7 @@ class Api {
         timestamp: String
     ): String? {
         try {
-            val url = "https://surakshakawach-mobilebackend-192854867616.asia-south2.run.app/api/v1/ticket"
+            val url = "https://surakshakawach-mobilebackend-192854867616.asia-south2.run.app/api/v1/ticket/create"
             Log.d("SOS_TICKET", "Sending SOS ticket to URL: $url with parameters: firebaseUID=$firebaseUID, latitude=$latitude, longitude=$longitude, timestamp=$timestamp")
 
             val response: HttpResponse = client.submitForm(
@@ -333,4 +337,76 @@ class Api {
 //            false
 //        }
 //    }
+
+    // Function to update emergency contacts
+    suspend fun updateEmergencyContacts(
+        firebaseUID: String,
+        oldContacts: List<EmergencyContact>,
+        newContacts: List<EmergencyContact>
+    ): Boolean {
+        return try {
+            val response: HttpResponse = client.post("https://surakshakawach-mobilebackend-192854867616.asia-south2.run.app/api/v1/user/update/emergency-contact") {
+                contentType(ContentType.Application.Json)
+                setBody(
+                    UpdateEmergencyContactRequest(
+                    firebaseUID = firebaseUID,
+                    old_contacts = oldContacts,
+                    new_contacts = newContacts
+                )
+                )
+            }
+
+            if (response.status.isSuccess()) {
+                Log.d("UPDATE_CONTACT", "Emergency contacts updated successfully.")
+                true
+            } else {
+                Log.e("UPDATE_CONTACT", "Failed to update emergency contacts. Status: ${response.status}")
+                false
+            }
+        } catch (e: ClientRequestException) {
+            Log.e("UPDATE_CONTACT", "Client request error: ${e.localizedMessage}")
+            false
+        } catch (e: ServerResponseException) {
+            Log.e("UPDATE_CONTACT", "Server response error: ${e.localizedMessage}")
+            false
+        } catch (e: Exception) {
+            Log.e("UPDATE_CONTACT", "Unexpected error: ${e.localizedMessage}")
+            false
+        }
+    }
+
+    suspend fun removeEmergencyContacts(
+        firebaseUID: String,
+        contactDetails: List<EmergencyContact>
+    ): Boolean {
+        return try {
+            val response: HttpResponse = client.post("https://surakshakawach-mobilebackend-192854867616.asia-south2.run.app/api/v1/user/remove/emergency-contact") {
+                contentType(ContentType.Application.Json)
+                setBody(
+                    RemoveEmergencyContactRequest(
+                    firebaseUID = firebaseUID,
+                    contact_details = contactDetails
+                )
+                )
+            }
+
+            if (response.status.isSuccess()) {
+                Log.d("UPDATE_CONTACT", "Emergency contacts updated successfully.")
+                true
+            } else {
+                Log.e("UPDATE_CONTACT", "Failed to update emergency contacts. Status: ${response.status}")
+                false
+            }
+        } catch (e: ClientRequestException) {
+            Log.e("UPDATE_CONTACT", "Client request error: ${e.localizedMessage}")
+            false
+        } catch (e: ServerResponseException) {
+            Log.e("UPDATE_CONTACT", "Server response error: ${e.localizedMessage}")
+            false
+        } catch (e: Exception) {
+            Log.e("UPDATE_CONTACT", "Unexpected error: ${e.localizedMessage}")
+            false
+        }
+    }
+
 }
