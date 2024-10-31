@@ -13,21 +13,13 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.core.content.ContextCompat
-import androidx.health.connect.client.HealthConnectClient
-import androidx.health.connect.client.permission.HealthPermission
-import androidx.health.connect.client.records.HeartRateRecord
-import androidx.health.connect.client.records.StepsRecord
+import androidx.lifecycle.lifecycleScope
 import com.nextlevelprogrammers.surakshakawach.ui.theme.SurakshaKawachTheme
 import kotlinx.coroutines.launch
 
 class PermissionActivity : ComponentActivity() {
 
-    private lateinit var healthConnectClient: HealthConnectClient
-    private val requiredHealthPermissions = setOf(
-        HealthPermission.getReadPermission(HeartRateRecord::class),
-        HealthPermission.getReadPermission(StepsRecord::class)
-    )
-
+    // Device permissions launcher
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
             val allPermissionsGranted = permissions.all { it.value }
@@ -41,15 +33,6 @@ class PermissionActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Initialize Health Connect Client with error handling
-        try {
-            healthConnectClient = HealthConnectClient.getOrCreate(this)
-        } catch (e: IllegalStateException) {
-            Toast.makeText(this, "Health Connect is not available on this device.", Toast.LENGTH_LONG).show()
-            finish()
-            return
-        }
-
         setContent {
             SurakshaKawachTheme {
                 PermissionScreen()
@@ -60,18 +43,15 @@ class PermissionActivity : ComponentActivity() {
     @Composable
     fun PermissionScreen() {
         var showDialog by remember { mutableStateOf(false) }
-        var healthPermissionsGranted by remember { mutableStateOf(false) }
         val coroutineScope = rememberCoroutineScope()
 
         LaunchedEffect(Unit) {
             coroutineScope.launch {
-                // Check both health and device permissions
-                healthPermissionsGranted = checkHealthPermissions()
-                val allPermissionsGranted = checkPermissions(healthPermissionsGranted)
+                val allPermissionsGranted = checkDevicePermissions()
                 if (!allPermissionsGranted) {
                     showDialog = true
                 } else {
-                    navigateToHome() // If all permissions are granted, navigate to Home
+                    navigateToHome()
                 }
             }
         }
@@ -89,7 +69,8 @@ class PermissionActivity : ComponentActivity() {
         }
     }
 
-    private fun checkPermissions(healthPermissionsGranted: Boolean): Boolean {
+    // Check device permissions
+    private fun checkDevicePermissions(): Boolean {
         val locationPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
         val contactPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS)
         val cameraPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
@@ -98,12 +79,11 @@ class PermissionActivity : ComponentActivity() {
         return locationPermission == PackageManager.PERMISSION_GRANTED &&
                 contactPermission == PackageManager.PERMISSION_GRANTED &&
                 cameraPermission == PackageManager.PERMISSION_GRANTED &&
-                audioPermission == PackageManager.PERMISSION_GRANTED &&
-                healthPermissionsGranted
+                audioPermission == PackageManager.PERMISSION_GRANTED
     }
 
+    // Request device permissions
     private fun requestAllPermissions() {
-        // Request both device and health permissions
         permissionLauncher.launch(
             arrayOf(
                 Manifest.permission.ACCESS_FINE_LOCATION,
@@ -112,16 +92,6 @@ class PermissionActivity : ComponentActivity() {
                 Manifest.permission.RECORD_AUDIO
             )
         )
-
-        // Request health permissions separately
-        permissionLauncher.launch(
-            requiredHealthPermissions.map { it.toString() }.toTypedArray()
-        )
-    }
-
-    private suspend fun checkHealthPermissions(): Boolean {
-        val grantedPermissions = healthConnectClient.permissionController.getGrantedPermissions()
-        return requiredHealthPermissions.all { it in grantedPermissions }
     }
 
     private fun navigateToHome() {
@@ -138,7 +108,7 @@ class PermissionActivity : ComponentActivity() {
                 Text(text = "Permissions Required")
             },
             text = {
-                Text("We need access to location, contacts, camera, audio, and health data (steps, heart rate) to provide the best experience.")
+                Text("We need access to location, contacts, camera, and audio to provide the best experience.")
             },
             confirmButton = {
                 Button(onClick = onAllow) {
