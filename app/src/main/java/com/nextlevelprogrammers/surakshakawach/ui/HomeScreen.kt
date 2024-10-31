@@ -41,6 +41,13 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import Api
+import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.ui.layout.ContentScale
 import com.nextlevelprogrammers.surakshakawach.R
 import com.nextlevelprogrammers.surakshakawach.SOSActivity
 import com.nextlevelprogrammers.surakshakawach.WatchActivity
@@ -182,236 +189,163 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
 
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Main content
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.White)
-                .padding(16.dp)
-        ) {
-            // Top bar with icons
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = { // Navigate to the DashboardScreen using NavController
-                    navController.navigate("dashboard")
-                }) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.ic_profile), // Replace with your icon resource
-                        contentDescription = "Profile",
-                        tint = Color.Black,
-                        modifier = Modifier.size(58.dp)
-                    )
-                }
-                Text(
-                    text = "Suraksha Kawach",
-                    color = Color.Black,
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    style = MaterialTheme.typography.headlineSmall
-                )
-                IconButton(onClick = {
-                    isDrawerVisible = !isDrawerVisible // Toggle the drawer visibility
-                }) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.ic_settings), // Replace with your icon resource
-                        contentDescription = "Settings",
-                        tint = Color.Black,
-                        modifier = Modifier.size(58.dp)
-                    )
-                }
-            }
 
-            // Google Map with SOS button overlay
-            Box(
+        Image(
+            painter = painterResource(id = R.drawable.theme),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        // Background image and main content
+        Column(modifier = Modifier.fillMaxSize()) {
+
+            // Main content layout
+            Column(
                 modifier = Modifier
-                    .weight(1.5f)
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .fillMaxSize()
+                    .weight(1f) // Takes up remaining space above the BottomNavBar
+                    .background(Color.Transparent)
+                    .padding(16.dp)
             ) {
+                // Top bar with icons
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { navController.navigate("dashboard") }) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_profile),
+                            contentDescription = "Profile",
+                            tint = Color.White,
+                            modifier = Modifier.size(58.dp)
+                        )
+                    }
+                    Text(
+                        text = "Suraksha Kawach",
+                        color = Color.White,
+                        style = MaterialTheme.typography.headlineSmall
+                    )
+                    IconButton(onClick = { isDrawerVisible = !isDrawerVisible }) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_settings),
+                            contentDescription = "Settings",
+                            tint = Color.White,
+                            modifier = Modifier.size(58.dp)
+                        )
+                    }
+                }
+
+                // Google Map with SOS button overlay
                 Box(
                     modifier = Modifier
-                        .height(410.dp)
+                        .weight(1.5f)
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
                 ) {
-                    GoogleMap(
-                        modifier = Modifier.fillMaxSize(),
-                        cameraPositionState = rememberCameraPositionState {
-                            position = CameraPosition.fromLatLngZoom(currentLocation, 14f)
-                        },
-                        uiSettings = MapUiSettings(zoomControlsEnabled = false)
-                    )
-                }
-
-                // SOS Button, positioned at the bottom of the map
-                Button(
-                    onClick = {
-                        Log.d("SOS_TICKET", "SOS button clicked")
-                        if (hasLocationPermission) {
-                            // Show the modal and start the timer
-                            showModal = true
-                            startTimer()
-                        } else {
-                            Log.e("SOS_TICKET", "Permission not granted")
-                        }
-                    },
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .offset(y = (-20).dp)
-                        .height(90.dp)
-                        .width(150.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text(text = "SOS", color = Color.White)
-                }
-            }
-
-            // Modal Dialog for SOS Confirmation
-            if (showModal) {
-                AlertDialog(
-                    onDismissRequest = { /* Do nothing when clicking outside */ },
-                    title = { Text("Send SOS?") },
-                    text = {
-                        Column {
-                            Text("SOS will be sent in $countdown seconds.")
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text("Do you want to cancel or confirm?")
-                        }
-                    },
-                    confirmButton = {
-                        Button(onClick = {
-                            sendSOSManually() // Call manual SOS sending function on confirm
-                        }) {
-                            Text("Confirm")
-                        }
-                    },
-                    dismissButton = {
-                        Button(onClick = {
-                            isSOSCanceled = true // Cancel the SOS process
-                            showModal = false
-                            countdownTimer?.cancel() // Cancel the timer on cancel
-                            isRequestSent = false // Reset the request flag if the user cancels
-                        }) {
-                            Text("Cancel")
-                        }
-                    }
-                )
-            }
-
-
-            // Favourites section
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color.Gray, RoundedCornerShape(16.dp))
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Text(text = "Favourites", color = Color.Black)
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        horizontalArrangement = Arrangement.Center
+                    Box(
+                        modifier = Modifier
+                            .height(410.dp)
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
                     ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.avatar1), // Replace with your avatar resource
-                            contentDescription = "Avatar 1",
-                            modifier = Modifier
-                                .size(100.dp)
-                                .padding(end = 20.dp)
-                        )
-                        Image(
-                            painter = painterResource(id = R.drawable.avatar2), // Replace with your avatar resource
-                            contentDescription = "Avatar 2",
-                            modifier = Modifier
-                                .size(100.dp)
-                                .padding(end = 20.dp)
-                        )
-                        Image(
-                            painter = painterResource(id = R.drawable.avatar3), // Replace with your avatar resource
-                            contentDescription = "Avatar 3",
-                            modifier = Modifier
-                                .size(100.dp)
-                                .padding(start = 16.dp)
+                        GoogleMap(
+                            modifier = Modifier.fillMaxSize(),
+                            cameraPositionState = rememberCameraPositionState {
+                                position = CameraPosition.fromLatLngZoom(currentLocation, 14f)
+                            },
+                            uiSettings = MapUiSettings(zoomControlsEnabled = false)
                         )
                     }
-                }
-            }
 
-            // Bottom navigation bar
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color.White)
-                    .padding(top = 16.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                IconButton(onClick = { /* Handle home click */ }) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.ic_home), // Replace with your icon resource
-                        contentDescription = "Home",
-                        tint = Color.Black
-                    )
-                }
-                IconButton(onClick = {
-                    val intent = Intent(context, WatchActivity::class.java)
-                    context.startActivity(intent)
-                }) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.ic_watch), // Replace with your icon resource
-                        contentDescription = "Another",
-                        tint = Color.Black
-                    )
-                }
-                IconButton(onClick = { /* Handle settings click */ }) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.ic_home), // Replace with your icon resource
-                        contentDescription = "Settings",
-                        tint = Color.Black
-                    )
-                }
-            }
-        }
-
-        // Conditional rendering of the drawer
-        if (isDrawerVisible) {
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .width(300.dp)
-                    .background(Color.Gray)
-                    .padding(16.dp)
-                    .align(Alignment.CenterStart)
-            ) {
-                Column {
-                    TextButton(onClick = { /* Handle Profile click */ }) {
-                        Text(text = "Profile", color = Color.White)
+                    // SOS Button, positioned at the bottom of the map
+                    Button(
+                        onClick = {
+                            if (hasLocationPermission) {
+                                showModal = true
+                                startTimer()
+                            } else {
+                                Log.e("SOS_TICKET", "Permission not granted")
+                            }
+                        },
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .offset(y = (-20).dp)
+                            .height(90.dp)
+                            .width(150.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(text = "SOS", color = Color.White)
                     }
-                    TextButton(onClick = {
-                        coroutineScope.launch {
-                            navController.navigate("emergency_contacts") // Navigate to EmergencyContactsScreen
+                }
+
+                if (showModal) {
+                    AlertDialog(
+                        onDismissRequest = {},
+                        title = { Text("Send SOS?") },
+                        text = {
+                            Column {
+                                Text("SOS will be sent in $countdown seconds.")
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("Do you want to cancel or confirm?")
+                            }
+                        },
+                        confirmButton = {
+                            Button(onClick = { sendSOSManually() }) {
+                                Text("Confirm")
+                            }
+                        },
+                        dismissButton = {
+                            Button(onClick = {
+                                isSOSCanceled = true
+                                showModal = false
+                                countdownTimer?.cancel()
+                                isRequestSent = false
+                            }) {
+                                Text("Cancel")
+                            }
                         }
-                    }) {
-                        Text(text = "Emergency Contacts", color = Color.White)
-                    }
-                    TextButton(onClick = { /* Handle Logout click */ }) {
-                        Text(text = "Logout", color = Color.White)
-                    }
-                    Spacer(modifier = Modifier.weight(1f))
-                    TextButton(onClick = { /* Handle Help click */ }) {
-                        Text(text = "Help", color = Color.White)
-                    }
+                    )
                 }
             }
+
+            // Bottom Navigation Bar
+            BottomNavBar(navController)
         }
+    }
+}
+
+@Composable
+fun BottomNavBar(navController: NavHostController) {
+    val context = LocalContext.current
+    NavigationBar {
+        NavigationBarItem(
+            selected = true,
+            onClick = { navController.navigate("home") },
+            label = { Text("Home") },
+            icon = { Icon(Icons.Default.Home, contentDescription = "Home") }
+        )
+        NavigationBarItem(
+            selected = false,
+            onClick = {
+                Toast.makeText(context, "Ongoing Work", Toast.LENGTH_SHORT).show()
+            },
+            label = { Text("Search") },
+            icon = { Icon(Icons.Default.AccountCircle, contentDescription = "Search") }
+        )
+        NavigationBarItem(
+            selected = false,
+            onClick = {
+                val intent = Intent(context, WatchActivity::class.java)
+                context.startActivity(intent)
+            },
+            label = { Text("Profile") },
+            icon = { Icon(Icons.Default.Person, contentDescription = "Profile") }
+        )
     }
 }
 

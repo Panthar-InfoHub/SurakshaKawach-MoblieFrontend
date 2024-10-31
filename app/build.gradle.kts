@@ -106,7 +106,6 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation (libs.android.maps.utils)
     implementation (libs.firebase.storage)
-    implementation (libs.androidx.connect.client)
     implementation (libs.integrity)
 
 }

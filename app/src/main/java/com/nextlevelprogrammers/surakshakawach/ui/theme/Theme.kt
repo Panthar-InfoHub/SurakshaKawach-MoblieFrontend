@@ -12,14 +12,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
-val PurpleGradient = Brush.verticalGradient(
-    colors = listOf(
-        Color(0xFF6200EA), // Purple (darker shade)
-        Color(0xFF9C27B0)  // Lighter purple
-    )
-)
-
-
 private val DarkColorScheme = darkColorScheme(
     primary = Purple80,
     secondary = PurpleGrey80,

@@ -1,16 +1,11 @@
 package com.nextlevelprogrammers.surakshakawach
 
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
@@ -27,11 +22,6 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.health.connect.client.HealthConnectClient
-import androidx.health.connect.client.records.HeartRateRecord
-import androidx.health.connect.client.records.StepsRecord
-import androidx.health.connect.client.request.ReadRecordsRequest
-import androidx.health.connect.client.time.TimeRangeFilter
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.TileOverlayOptions
@@ -42,54 +32,19 @@ import com.google.maps.android.compose.rememberCameraPositionState
 import com.google.maps.android.heatmaps.HeatmapTileProvider
 import com.google.maps.android.heatmaps.WeightedLatLng
 import com.nextlevelprogrammers.surakshakawach.ui.theme.SurakshaKawachTheme
-import java.time.ZonedDateTime
 import kotlin.random.Random
 
 class WatchActivity : ComponentActivity() {
 
-    private var healthConnectClient: HealthConnectClient? = null
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val availabilityStatus = HealthConnectClient.getSdkStatus(this)
-        if (availabilityStatus != HealthConnectClient.SDK_AVAILABLE) {
-            Toast.makeText(this, "Health Connect is not available on this device.", Toast.LENGTH_LONG).show()
-            return
-        }
-
-        healthConnectClient = HealthConnectClient.getOrCreate(this)
-
         setContent {
             SurakshaKawachTheme {
-                WatchScreen(healthConnectClient, modifier = Modifier.background(Color.White))
+                WatchScreen(modifier = Modifier.background(Color.White))
             }
         }
     }
-}
-
-suspend fun fetchHeartRateData(healthConnectClient: HealthConnectClient): List<HeartRateRecord> {
-    val request = ReadRecordsRequest(
-        recordType = HeartRateRecord::class,
-        timeRangeFilter = TimeRangeFilter.between(
-            ZonedDateTime.now().minusDays(1).toInstant(),
-            ZonedDateTime.now().toInstant()
-        )
-    )
-    val response = healthConnectClient.readRecords(request)
-    return response.records
-}
-
-suspend fun fetchStepsData(healthConnectClient: HealthConnectClient): List<StepsRecord> {
-    val request = ReadRecordsRequest(
-        recordType = StepsRecord::class,
-        timeRangeFilter = TimeRangeFilter.between(
-            ZonedDateTime.now().minusDays(1).toInstant(),
-            ZonedDateTime.now().toInstant()
-        )
-    )
-    val response = healthConnectClient.readRecords(request)
-    return response.records
 }
 
 fun generateMockLocationData(): List<LatLng> {
@@ -109,16 +64,10 @@ fun generateMockLocationData(): List<LatLng> {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WatchScreen(healthConnectClient: HealthConnectClient?, modifier: Modifier = Modifier) {
-    var heartRateData by remember { mutableStateOf(listOf<HeartRateRecord>()) }
-    var stepsData by remember { mutableStateOf(listOf<StepsRecord>()) }
-
-    LaunchedEffect(Unit) {
-        healthConnectClient?.let {
-            heartRateData = fetchHeartRateData(it)
-            stepsData = fetchStepsData(it)
-        }
-    }
+fun WatchScreen(modifier: Modifier = Modifier) {
+    // Mock data for heart rate and steps
+    val mockHeartRateData = listOf(72, 75, 78, 76, 74, 77, 73) // Replace with actual data if available
+    val mockStepsData = listOf(1000, 1200, 1100, 1050, 1300, 1150, 1250) // Replace with actual data if available
 
     Scaffold(
         topBar = {
@@ -140,13 +89,13 @@ fun WatchScreen(healthConnectClient: HealthConnectClient?, modifier: Modifier = 
                         color = Color.Black
                     )
                     Text(
-                        text = "BPM: ${heartRateData.lastOrNull()?.samples?.lastOrNull()?.beatsPerMinute ?: "N/A"}",
+                        text = "BPM: ${mockHeartRateData.lastOrNull() ?: "N/A"}",
                         fontSize = 18.sp,
                         color = Color.DarkGray
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     BarChart(
-                        data = heartRateData.flatMap { it.samples.map { sample -> sample.beatsPerMinute } },
+                        data = mockHeartRateData,
                         barColor = Color.Red
                     )
 
@@ -159,12 +108,12 @@ fun WatchScreen(healthConnectClient: HealthConnectClient?, modifier: Modifier = 
                         color = Color.Black
                     )
                     Text(
-                        text = "Total Steps: ${stepsData.sumOf { it.count }}",
+                        text = "Total Steps: ${mockStepsData.sum()}",
                         fontSize = 18.sp,
                         color = Color.DarkGray
                     )
                     Spacer(modifier = Modifier.height(16.dp))
-                    BarChart(data = stepsData.map { it.count }, barColor = Color.Green)
+                    BarChart(data = mockStepsData, barColor = Color.Green)
 
                     Spacer(modifier = Modifier.height(32.dp))
 
@@ -183,7 +132,7 @@ fun WatchScreen(healthConnectClient: HealthConnectClient?, modifier: Modifier = 
 
 @Composable
 fun BarChart(
-    data: List<Long>,
+    data: List<Int>,
     modifier: Modifier = Modifier,
     barColor: Color = Color.Blue,
     maxBarHeight: Float = 200f,

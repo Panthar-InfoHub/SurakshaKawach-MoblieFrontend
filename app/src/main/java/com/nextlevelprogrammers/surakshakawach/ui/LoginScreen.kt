@@ -30,10 +30,10 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 import Api
+import androidx.compose.ui.layout.ContentScale
 import com.nextlevelprogrammers.surakshakawach.PermissionActivity
 import com.nextlevelprogrammers.surakshakawach.R
 import com.nextlevelprogrammers.surakshakawach.api.UserPreferences
-import com.nextlevelprogrammers.surakshakawach.ui.theme.PurpleGradient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -220,10 +220,18 @@ fun LoginScreenUI(
 ) {
     var selectedGender by remember { mutableStateOf<String?>(null) }
 
+    Image(
+        painter = painterResource(id = R.drawable.theme), // Replace with your actual drawable ID
+        contentDescription = null,
+        contentScale = ContentScale.Crop,
+        modifier = Modifier.fillMaxSize()
+    )
+
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(PurpleGradient)
+            .background(Color.Transparent)
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
