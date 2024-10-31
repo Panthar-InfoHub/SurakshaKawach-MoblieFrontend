@@ -8,29 +8,34 @@ plugins {
 }
 
 android {
-    namespace = "com.pantharinfohub.surakshakawach"
-    compileSdk = 34
+    namespace = "com.nextlevelprogrammers.surakshakawach"
+    compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.pantharinfohub.surakshakawach"
+        applicationId = "com.nextlevelprogrammers.surakshakawach"
         minSdk = 27
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 7
+        versionName = "1.2.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        ndk {
+            debugSymbolLevel = "FULL" // This will generate full debug symbols
+        }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     compileOptions {
@@ -101,4 +106,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation (libs.android.maps.utils)
     implementation (libs.firebase.storage)
+    implementation (libs.androidx.connect.client)
+    implementation (libs.integrity)
+
 }
