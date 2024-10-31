@@ -7,18 +7,18 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:192854867616:android:b39c0dbc8d8e5cfebad3c5",
+        "mobilesdk_app_id": "1:192854867616:android:934464a114842cb2bad3c5",
         "android_client_info": {
-          "package_name": "com.pantharinfohub.surakshakawach"
+          "package_name": "com.nextlevelprogrammers.surakshakawach"
         }
       },
       "oauth_client": [
         {
-          "client_id": "192854867616-4te7lrjhfdf3tdssj8huh36rbt8oultu.apps.googleusercontent.com",
+          "client_id": "192854867616-mvq0is00su4qs0otnlrpgrn7fg05nn4u.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.pantharinfohub.surakshakawach",
-            "certificate_hash": "1f5a2bf8a12c957f05faca9bb83023c3cdbc6eda"
+            "package_name": "com.nextlevelprogrammers.surakshakawach",
+            "certificate_hash": "252e6c9001b3a4e34ac4c02b5cb42e4e840de522"
           }
         },
         {

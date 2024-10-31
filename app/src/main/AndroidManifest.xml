@@ -22,6 +22,12 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 
+    <!-- Health Connect Permission -->
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE"/>
+    <uses-permission android:name="android.permission.health.WRITE_HEART_RATE"/>
+    <uses-permission android:name="android.permission.health.READ_STEPS"/>
+    <uses-permission android:name="android.permission.health.WRITE_STEPS"/>
+
     <application
         android:name=".SurakshaKawach"
         android:allowBackup="true"
@@ -34,10 +40,12 @@
         android:theme="@style/Theme.SurakshaKawach"
         tools:targetApi="31">
 
-        <service
-            android:name=".SOSBackgroundService"
-            android:foregroundServiceType="location|camera"
-            android:exported="false"/>
+
+
+        <activity
+            android:name="com.google.android.gms.auth.api.signin.internal.SignInHubActivity"
+            android:screenOrientation="fullSensor"
+            android:windowSoftInputMode="stateAlwaysHidden|adjustPan" />
 
         <activity
             android:name=".MainActivity"
@@ -50,8 +58,10 @@
             </intent-filter>
         </activity>
 
+        <activity android:name=".IntroductionActivity" />
+
         <activity
-            android:name=".LoginScreen"
+            android:name=".ui.LoginScreen"
             android:exported="true"
             android:label="Login"
             android:theme="@style/Theme.SurakshaKawach" />
@@ -66,6 +76,20 @@
             android:exported="true"
             android:label="HomeScreen"
             android:theme="@style/Theme.SurakshaKawach"/>
+
+        <activity
+            android:name=".EmergencyDashboardActivity"
+            android:exported="true">
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="suraksha-kawach-24ff7.el.r.appspot.com"
+                    android:pathPrefix="/sos/view" />
+            </intent-filter>
+        </activity>
 
         <activity
             android:name=".WatchActivity"
