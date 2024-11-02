@@ -43,14 +43,22 @@ import java.util.Locale
 import Api
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.sp
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
+import com.google.maps.android.compose.MapProperties
+import com.google.maps.android.compose.MapType
+import com.google.maps.android.compose.Marker
 import com.nextlevelprogrammers.surakshakawach.R
 import com.nextlevelprogrammers.surakshakawach.SOSActivity
 import com.nextlevelprogrammers.surakshakawach.WatchActivity
+import com.google.maps.android.compose.MarkerState
 
 @Composable
 fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocationProviderClient) {
@@ -71,6 +79,14 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
     var countdownTimer: CountDownTimer? = null
 
     var isRequestSent by remember { mutableStateOf(false) }
+
+    var isSatelliteView by remember { mutableStateOf(false) }
+    val markerState = remember { MarkerState(position = currentLocation) }
+    var showMapTypeSelector by remember { mutableStateOf(false) }
+    var mapType by remember { mutableStateOf(MapType.NORMAL) }
+    val cameraPositionState = rememberCameraPositionState {
+        position = CameraPosition.fromLatLngZoom(currentLocation, 14f)
+    }
 
     // Firebase UID
     val firebaseAuth = FirebaseAuth.getInstance()
@@ -102,6 +118,10 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
         if (!hasLocationPermission) {
             permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
         }
+    }
+
+    LaunchedEffect(currentLocation) {
+        markerState.position = currentLocation
     }
 
     // Function to handle SOS ticket creation
@@ -188,7 +208,7 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
     }
 
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxHeight().fillMaxSize()) {
 
         Image(
             painter = painterResource(id = R.drawable.theme),
@@ -208,57 +228,144 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
                     .background(Color.Transparent)
                     .padding(16.dp)
             ) {
-                // Top bar with icons
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = { navController.navigate("dashboard") }) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_profile),
-                            contentDescription = "Profile",
-                            tint = Color.White,
-                            modifier = Modifier.size(58.dp)
-                        )
-                    }
-                    Text(
-                        text = "Suraksha Kawach",
-                        color = Color.White,
-                        style = MaterialTheme.typography.headlineSmall
-                    )
-                    IconButton(onClick = { isDrawerVisible = !isDrawerVisible }) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_settings),
-                            contentDescription = "Settings",
-                            tint = Color.White,
-                            modifier = Modifier.size(58.dp)
-                        )
-                    }
-                }
 
                 // Google Map with SOS button overlay
                 Box(
                     modifier = Modifier
                         .weight(1.5f)
+                        .fillMaxHeight()
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
                 ) {
+
+
                     Box(
                         modifier = Modifier
-                            .height(410.dp)
+                            .fillMaxHeight()
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(16.dp))
                     ) {
+
                         GoogleMap(
                             modifier = Modifier.fillMaxSize(),
-                            cameraPositionState = rememberCameraPositionState {
-                                position = CameraPosition.fromLatLngZoom(currentLocation, 14f)
+                            cameraPositionState = cameraPositionState,
+                            uiSettings = MapUiSettings(zoomControlsEnabled = false),
+                            properties = MapProperties(mapType = mapType)
+                        ) {
+                            // Define the marker state with the current location
+                            Marker(
+                                state = markerState,
+                                title = "You are here",
+                                snippet = "Current Location",
+                            )
+                        }
+
+                        // Top bar with icons
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            // Profile icon aligned on the left
+                            IconButton(onClick = { navController.navigate("dashboard") }) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.ic_profile),
+                                    contentDescription = "Profile",
+                                    tint = Color.Black,
+                                    modifier = Modifier.background(Color.White, CircleShape).size(48.dp)
+                                )
+                            }
+
+                            // Column to stack Settings and Map Type Toggle Button, aligned on the right
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                IconButton(onClick = { isDrawerVisible = !isDrawerVisible }) {
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.ic_settings),
+                                        contentDescription = "Settings",
+                                        tint = Color.Black,
+                                        modifier = Modifier.background(Color.White, CircleShape).size(48.dp)
+                                    )
+                                }
+
+                                // Spacer to add padding between the Settings icon and Map Type Toggle Button
+                                Spacer(modifier = Modifier.height(8.dp)) // Adjust this height as needed
+
+                                // Icon Button to toggle the Map Type Selector Card
+                                IconButton(
+                                    onClick = { showMapTypeSelector = true }, // Show the card when clicked
+                                    modifier = Modifier
+                                        .background(Color.White, CircleShape)
+                                        .size(48.dp)
+                                ) {
+                                    Icon(
+                                        painter = painterResource(id = R.drawable.map_type), // Custom icon for map type
+                                        contentDescription = "Map Type",
+                                        tint = Color.Black
+                                    )
+                                }
+                            }
+                        }
+
+                        // Re-center Button
+                        IconButton(
+                            onClick = {
+                                coroutineScope.launch {
+                                    cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(currentLocation, 14f))
+                                }
                             },
-                            uiSettings = MapUiSettings(zoomControlsEnabled = false)
-                        )
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(16.dp)
+                                .background(Color.White, CircleShape)
+                                .size(48.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.my_location),
+                                contentDescription = "My Location",
+                                tint = Color.Black
+                            )
+                        }
+
+                        // Map Type Selector Card (shown when showMapTypeSelector is true)
+                        if (showMapTypeSelector) {
+                            Card(
+                                modifier = Modifier
+                                    .align(Alignment.Center)
+                                    .padding(16.dp)
+                                    .background(Color.White, shape = RoundedCornerShape(12.dp)),
+                                elevation = CardDefaults.cardElevation(8.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(16.dp)
+                                ) {
+                                    Text(
+                                        text = "Select Map Type",
+                                        fontSize = 18.sp,
+                                        color = Color.Black,
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Divider(color = Color.Gray)
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    // Map type options
+                                    MapTypeOption("Normal View") {
+                                        mapType = MapType.NORMAL
+                                        showMapTypeSelector = false
+                                    }
+                                    MapTypeOption("Satellite View") {
+                                        mapType = MapType.SATELLITE
+                                        showMapTypeSelector = false
+                                    }
+                                    MapTypeOption("Terrain View") {
+                                        mapType = MapType.TERRAIN
+                                        showMapTypeSelector = false
+                                    }
+                                }
+                            }
+                        }
+
+
                     }
 
                     // SOS Button, positioned at the bottom of the map
@@ -274,13 +381,18 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .offset(y = (-20).dp)
-                            .height(90.dp)
-                            .width(150.dp),
+                            .size(150.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = CircleShape,
+                        elevation = ButtonDefaults.buttonElevation(
+                            defaultElevation = 8.dp, // Adjust this value for more or less elevation
+                            pressedElevation = 12.dp,
+                            disabledElevation = 0.dp
+                        )
                     ) {
-                        Text(text = "SOS", color = Color.White)
+                        Text(text = "SOS", color = Color.White, fontSize = 40.sp)
                     }
+
                 }
 
                 if (showModal) {
@@ -316,6 +428,38 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
             // Bottom Navigation Bar
             BottomNavBar(navController)
         }
+
+        // Conditional rendering of the drawer
+        if (isDrawerVisible) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(300.dp)
+                    .background(Color.Gray)
+                    .padding(16.dp)
+                    .align(Alignment.CenterStart)
+            ) {
+                Column {
+                    TextButton(onClick = { /* Handle Profile click */ }) {
+                        Text(text = "Profile", color = Color.White)
+                    }
+                    TextButton(onClick = {
+                        coroutineScope.launch {
+                            navController.navigate("emergency_contacts") // Navigate to EmergencyContactsScreen
+                        }
+                    }) {
+                        Text(text = "Emergency Contacts", color = Color.White)
+                    }
+                    TextButton(onClick = { /* Handle Logout click */ }) {
+                        Text(text = "Logout", color = Color.White)
+                    }
+                    Spacer(modifier = Modifier.weight(1f))
+                    TextButton(onClick = { /* Handle Help click */ }) {
+                        Text(text = "Help", color = Color.White)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -326,16 +470,20 @@ fun BottomNavBar(navController: NavHostController) {
         NavigationBarItem(
             selected = true,
             onClick = { navController.navigate("home") },
-            label = { Text("Home") },
-            icon = { Icon(Icons.Default.Home, contentDescription = "Home") }
+            icon = { Icon(
+                painter = painterResource(id = R.drawable.home), // Use your custom drawable resource
+                contentDescription = "Home"
+            ) }
         )
         NavigationBarItem(
             selected = false,
             onClick = {
                 Toast.makeText(context, "Ongoing Work", Toast.LENGTH_SHORT).show()
             },
-            label = { Text("Search") },
-            icon = { Icon(Icons.Default.AccountCircle, contentDescription = "Search") }
+            icon = { Icon(
+                painter = painterResource(id = R.drawable.search), // Use your custom drawable resource
+                contentDescription = "Home"
+            ) }
         )
         NavigationBarItem(
             selected = false,
@@ -343,8 +491,30 @@ fun BottomNavBar(navController: NavHostController) {
                 val intent = Intent(context, WatchActivity::class.java)
                 context.startActivity(intent)
             },
-            label = { Text("Profile") },
-            icon = { Icon(Icons.Default.Person, contentDescription = "Profile") }
+            icon = { Icon(
+                painter = painterResource(id = R.drawable.watch), // Use your custom drawable resource
+                contentDescription = "Home"
+            ) }
+        )
+        NavigationBarItem(
+            selected = false,
+            onClick = {
+                Toast.makeText(context, "Ongoing Work", Toast.LENGTH_SHORT).show()
+            },
+            icon = { Icon(
+                painter = painterResource(id = R.drawable.notifications), // Use your custom drawable resource
+                contentDescription = "Home"
+            ) }
+        )
+        NavigationBarItem(
+            selected = false,
+            onClick = {
+                Toast.makeText(context, "Ongoing Work", Toast.LENGTH_SHORT).show()
+            },
+            icon = { Icon(
+                painter = painterResource(id = R.drawable.history), // Use your custom drawable resource
+                contentDescription = "Home"
+            ) }
         )
     }
 }
@@ -353,4 +523,16 @@ fun BottomNavBar(navController: NavHostController) {
 fun getCurrentTimestamp(): String {
     val sdf = SimpleDateFormat("dd MMMM yyyy", Locale.getDefault())
     return sdf.format(Date())
+}
+
+@Composable
+fun MapTypeOption(name: String, onClick: () -> Unit) {
+    TextButton(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+    ) {
+        Text(text = name, fontSize = 16.sp, color = Color.Black)
+    }
 }
