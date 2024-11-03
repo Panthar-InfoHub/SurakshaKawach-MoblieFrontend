@@ -5,18 +5,42 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import coil.compose.rememberImagePainter
+import coil.transform.CircleCropTransformation
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
+import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.LatLng
+import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.MapProperties
+import com.google.maps.android.compose.MapType
+import com.google.maps.android.compose.MapUiSettings
+import com.google.maps.android.compose.Marker
+import com.google.maps.android.compose.MarkerState
+import com.google.maps.android.compose.rememberCameraPositionState
 import com.nextlevelprogrammers.surakshakawach.ui.theme.SurakshaKawachTheme
 import kotlinx.coroutines.launch
+import com.nextlevelprogrammers.surakshakawach.api.Coordinates
+import com.nextlevelprogrammers.surakshakawach.ui.BottomNavBar
 
 class EmergencyDashboardActivity : ComponentActivity() {
 
@@ -45,88 +69,172 @@ class EmergencyDashboardActivity : ComponentActivity() {
 @Composable
 fun EmergencyDashboardScreen(ticketId: String?, firebaseUID: String?) {
     var ticketStatus by remember { mutableStateOf<String?>(null) }
+    var userName by remember { mutableStateOf("Unknown User") }
+    var profileImageUrl by remember { mutableStateOf<String?>(null) }
+    var coordinates by remember { mutableStateOf<Coordinates?>(null) }
+    var selectedTab by remember { mutableStateOf("Map") }
     val coroutineScope = rememberCoroutineScope()
 
-    // Fetch ticket status when the composable loads
+    // Fetch ticket and user data
     LaunchedEffect(ticketId, firebaseUID) {
         if (ticketId != null && firebaseUID != null) {
             coroutineScope.launch {
-                ticketStatus = Api().fetchTicketStatus(firebaseUID, ticketId)
-                Log.d("EmergencyDashboardScreen", "Ticket Status fetched: $ticketStatus") // Log status in composable
+                val ticketInfo = Api().fetchTicketStatus(firebaseUID, ticketId)
+                ticketStatus = ticketInfo?.status ?: "Unknown"
+                userName = ticketInfo?.userName ?: "Unknown User"
+                coordinates = Api().fetchLatestLocation(firebaseUID, ticketId)
             }
         }
     }
 
-    // Determine card color based on ticket status
-    val cardColor = when (ticketStatus) {
+    // Determine the color of the border ring based on ticket status
+    val statusColor = when (ticketStatus) {
         "closed" -> Color.Red
         "active" -> Color.Green
-        else -> MaterialTheme.colorScheme.primaryContainer // Default color
+        else -> Color.Gray
     }
 
-    // Adjust text color for readability
-    val textColor = if (cardColor == Color.Red || cardColor == Color.Green) Color.White else MaterialTheme.colorScheme.onSurface
+    // Main layout with full-screen map and overlays
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Map View or Multimedia View based on the selected tab
+        if (selectedTab == "Map") {
+            coordinates?.let {
+                FullScreenMap(latitude = it.latitude, longitude = it.longitude, userName = userName)
+            } ?: Text(
+                text = "Location data unavailable",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.Gray,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(horizontal = 16.dp)
+            )
+        } else {
+            // Placeholder for Multimedia content
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.DarkGray),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(text = "Multimedia Content", color = Color.White, fontSize = 20.sp)
+            }
+        }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.Top,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        // Title
-        Text(
-            text = "Emergency Dashboard",
-            style = MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
-
-        // Information Card
-        Card(
+        // Top overlay with profile and status
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = cardColor),
-            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                .padding(16.dp)
+                .align(Alignment.TopCenter)
+                .background(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(Color(0xFFE3F2FD), Color(0xFFC8E6C9))
+                    ),
+                    shape = RoundedCornerShape(20.dp)
+                )
+                .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                horizontalAlignment = Alignment.Start
+            // Profile Image with Status Dot
+            Box(
+                modifier = Modifier.size(50.dp),
+                contentAlignment = Alignment.TopEnd
             ) {
-                Icon(
-                    imageVector = Icons.Default.Warning,
-                    contentDescription = "Emergency Icon",
-                    modifier = Modifier.size(40.dp),
-                    tint = textColor // Set icon color to match text color for visibility
+                Image(
+                    painter = rememberImagePainter(
+                        data = profileImageUrl ?: "https://via.placeholder.com/150",
+                        builder = {
+                            transformations(CircleCropTransformation())
+                        }
+                    ),
+                    contentDescription = "Profile Picture",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(50.dp)
+                        .clip(CircleShape)
                 )
 
-                // Display ticketId and firebaseUID
-                if (ticketId != null && firebaseUID != null) {
-                    Text(text = "Ticket ID: $ticketId", style = MaterialTheme.typography.bodyLarge, color = textColor)
-                    Text(text = "Firebase UID: $firebaseUID", style = MaterialTheme.typography.bodyLarge, color = textColor)
-                    Text(text = "Status: ${ticketStatus ?: "Loading..."}", style = MaterialTheme.typography.bodyLarge, color = textColor)
-                } else {
-                    Text(text = "No active emergency", style = MaterialTheme.typography.bodyLarge, color = textColor)
-                }
+                // Status Dot
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .background(statusColor, shape = CircleShape)
+                        .align(Alignment.TopEnd)
+                        .offset(4.dp, -4.dp)
+                )
             }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            // User Name
+            Text(
+                text = userName,
+                style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp),
+                color = Color.Black,
+                modifier = Modifier.padding(start = 8.dp)
+            )
         }
 
-        // Action Buttons
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            Button(onClick = { /* Handle start emergency */ }) {
-                Text(text = "Start Emergency")
-            }
-            Button(
-                onClick = { /* Handle end emergency */ },
-                enabled = ticketId != null && firebaseUID != null
-            ) {
-                Text(text = "End Emergency")
-            }
-        }
+        // Bottom Navigation Bar for switching views
+        BottomNavBar(
+            selectedTab = selectedTab,
+            onTabSelected = { selectedTab = it },
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
+    }
+}
+
+@Composable
+fun FullScreenMap(latitude: Double, longitude: Double, userName: String) {
+    val cameraPositionState = rememberCameraPositionState {
+        position = CameraPosition.fromLatLngZoom(LatLng(latitude, longitude), 15f)
+    }
+
+    val markerState = remember { MarkerState(position = LatLng(latitude, longitude)) }
+
+    GoogleMap(
+        modifier = Modifier.fillMaxSize(),
+        cameraPositionState = cameraPositionState,
+        uiSettings = MapUiSettings(zoomControlsEnabled = true),
+        properties = MapProperties(mapType = MapType.NORMAL)
+    ) {
+        // Add a custom marker at the user's location
+        Marker(
+            state = markerState,
+            icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE),
+            title = userName,
+            snippet = "User's location"
+        )
+    }
+}
+
+@Composable
+fun BottomNavBar(selectedTab: String, onTabSelected: (String) -> Unit, modifier: Modifier = Modifier) {
+    NavigationBar(
+        modifier = modifier.fillMaxWidth(),
+        tonalElevation = 4.dp,
+    ) {
+        NavigationBarItem(
+            selected = selectedTab == "Map",
+            onClick = { onTabSelected("Map") },
+            icon = {
+                Icon(
+                    painter = painterResource(id = R.drawable.map_type), // Replace with your actual drawable resource
+                    contentDescription = "Map"
+                )
+            },
+            label = { Text("Map") }
+        )
+        NavigationBarItem(
+            selected = selectedTab == "Multimedia",
+            onClick = { onTabSelected("Multimedia") },
+            icon = {
+                Icon(
+                    painter = painterResource(id = R.drawable.media), // Replace with your actual drawable resource
+                    contentDescription = "Multimedia"
+                )
+            },
+            label = { Text("Multimedia") }
+        )
     }
 }

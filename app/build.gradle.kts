@@ -15,8 +15,8 @@ android {
         applicationId = "com.nextlevelprogrammers.surakshakawach"
         minSdk = 27
         targetSdk = 34
-        versionCode = 9
-        versionName = "1.4.1"
+        versionCode = 10
+        versionName = "1.4.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -107,5 +107,6 @@ dependencies {
     implementation (libs.android.maps.utils)
     implementation (libs.firebase.storage)
     implementation (libs.integrity)
+    implementation("io.coil-kt:coil-compose:2.7.0")
 
 }
