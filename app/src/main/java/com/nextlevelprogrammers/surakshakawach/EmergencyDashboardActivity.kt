@@ -1,31 +1,22 @@
 package com.nextlevelprogrammers.surakshakawach
 
+import Api
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.nextlevelprogrammers.surakshakawach.ui.theme.SurakshaKawachTheme
+import kotlinx.coroutines.launch
 
 class EmergencyDashboardActivity : ComponentActivity() {
 
@@ -34,7 +25,6 @@ class EmergencyDashboardActivity : ComponentActivity() {
 
         // Retrieve the deep link data
         val data = intent?.data
-
         val ticketId = data?.getQueryParameter("ticketId")
         val firebaseUID = data?.getQueryParameter("firebaseUID")
 
@@ -54,6 +44,29 @@ class EmergencyDashboardActivity : ComponentActivity() {
 
 @Composable
 fun EmergencyDashboardScreen(ticketId: String?, firebaseUID: String?) {
+    var ticketStatus by remember { mutableStateOf<String?>(null) }
+    val coroutineScope = rememberCoroutineScope()
+
+    // Fetch ticket status when the composable loads
+    LaunchedEffect(ticketId, firebaseUID) {
+        if (ticketId != null && firebaseUID != null) {
+            coroutineScope.launch {
+                ticketStatus = Api().fetchTicketStatus(firebaseUID, ticketId)
+                Log.d("EmergencyDashboardScreen", "Ticket Status fetched: $ticketStatus") // Log status in composable
+            }
+        }
+    }
+
+    // Determine card color based on ticket status
+    val cardColor = when (ticketStatus) {
+        "closed" -> Color.Red
+        "active" -> Color.Green
+        else -> MaterialTheme.colorScheme.primaryContainer // Default color
+    }
+
+    // Adjust text color for readability
+    val textColor = if (cardColor == Color.Red || cardColor == Color.Green) Color.White else MaterialTheme.colorScheme.onSurface
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -74,8 +87,8 @@ fun EmergencyDashboardScreen(ticketId: String?, firebaseUID: String?) {
                 .fillMaxWidth()
                 .padding(vertical = 8.dp),
             shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(MaterialTheme.colorScheme.primaryContainer),
-            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp) // Correct elevation
+            colors = CardDefaults.cardColors(containerColor = cardColor),
+            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
@@ -86,15 +99,16 @@ fun EmergencyDashboardScreen(ticketId: String?, firebaseUID: String?) {
                     imageVector = Icons.Default.Warning,
                     contentDescription = "Emergency Icon",
                     modifier = Modifier.size(40.dp),
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = textColor // Set icon color to match text color for visibility
                 )
 
                 // Display ticketId and firebaseUID
                 if (ticketId != null && firebaseUID != null) {
-                    Text(text = "Ticket ID: $ticketId", style = MaterialTheme.typography.bodyLarge)
-                    Text(text = "Firebase UID: $firebaseUID", style = MaterialTheme.typography.bodyLarge)
+                    Text(text = "Ticket ID: $ticketId", style = MaterialTheme.typography.bodyLarge, color = textColor)
+                    Text(text = "Firebase UID: $firebaseUID", style = MaterialTheme.typography.bodyLarge, color = textColor)
+                    Text(text = "Status: ${ticketStatus ?: "Loading..."}", style = MaterialTheme.typography.bodyLarge, color = textColor)
                 } else {
-                    Text(text = "No active emergency", style = MaterialTheme.typography.bodyLarge)
+                    Text(text = "No active emergency", style = MaterialTheme.typography.bodyLarge, color = textColor)
                 }
             }
         }

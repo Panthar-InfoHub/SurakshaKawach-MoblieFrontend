@@ -1,15 +1,18 @@
 package com.nextlevelprogrammers.surakshakawach.ui
 
+import Api
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.CountDownTimer
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -24,41 +27,32 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavHostController
 import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.firebase.auth.FirebaseAuth
 import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.MapProperties
+import com.google.maps.android.compose.MapType
 import com.google.maps.android.compose.MapUiSettings
+import com.google.maps.android.compose.Marker
+import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
+import com.nextlevelprogrammers.surakshakawach.R
+import com.nextlevelprogrammers.surakshakawach.SOSActivity
+import com.nextlevelprogrammers.surakshakawach.WatchActivity
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import Api
-import android.widget.Toast
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.unit.sp
-import com.google.android.gms.maps.CameraUpdateFactory
-import com.google.android.gms.maps.model.BitmapDescriptorFactory
-import com.google.maps.android.compose.MapProperties
-import com.google.maps.android.compose.MapType
-import com.google.maps.android.compose.Marker
-import com.nextlevelprogrammers.surakshakawach.R
-import com.nextlevelprogrammers.surakshakawach.SOSActivity
-import com.nextlevelprogrammers.surakshakawach.WatchActivity
-import com.google.maps.android.compose.MarkerState
 
 @Composable
 fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocationProviderClient) {
@@ -77,10 +71,11 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
     var isSOSCanceled by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     var countdownTimer: CountDownTimer? = null
-
+    var isLoading by remember { mutableStateOf(false) }
+    var isProcessCompleted by remember { mutableStateOf(true) }
     var isRequestSent by remember { mutableStateOf(false) }
+    var isSOSButtonEnabled by remember { mutableStateOf(true) }
 
-    var isSatelliteView by remember { mutableStateOf(false) }
     val markerState = remember { MarkerState(position = currentLocation) }
     var showMapTypeSelector by remember { mutableStateOf(false) }
     var mapType by remember { mutableStateOf(MapType.NORMAL) }
@@ -126,6 +121,8 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
 
     // Function to handle SOS ticket creation
     suspend fun handleSOSTicket(firebaseUID: String?) {
+        Log.d("SOS_TICKET", "Entered handleSOSTicket function.")
+
         if (firebaseUID.isNullOrEmpty()) {
             Log.e("SOS_TICKET", "Firebase UID is null or empty.")
             return
@@ -152,26 +149,30 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
         }
     }
 
-
     // Start the countdown timer and navigate to SOSActivity
     fun startTimer() {
+        Log.d("SOS_TIMER", "Starting timer.")
         countdown = 5 // Reset countdown
         isSOSCanceled = false // Reset cancel flag
+        isSOSButtonEnabled = false
 
         countdownTimer = object : CountDownTimer(5000, 1000) {
             override fun onTick(millisUntilFinished: Long) {
                 countdown = (millisUntilFinished / 1000).toInt()
+                Log.d("SOS_TIMER", "Countdown ticking: $countdown seconds remaining.")
             }
 
             override fun onFinish() {
+                Log.d("SOS_TIMER", "Timer finished.")
                 if (!isSOSCanceled && !isRequestSent) {
+                    Log.d("SOS_TIMER", "SOS request will be sent now.")
                     isRequestSent = true // Set flag to prevent further requests
                     coroutineScope.launch {
                         try {
                             handleSOSTicket(firebaseUID ?: return@launch)
-
                             // Check if sosTicketId is not null before navigating
                             if (sosTicketId != null) {
+                                Log.d("SOS_NAVIGATION", "Navigating to SOSActivity with ticket ID: $sosTicketId")
                                 val intent = Intent(context, SOSActivity::class.java)
                                 intent.putExtra("sosTicketId", sosTicketId)
                                 context.startActivity(intent)
@@ -184,29 +185,47 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
                             // Optionally notify the user about the failure
                         }
                     }
+                } else {
+                    Log.d("SOS_TIMER", "SOS request canceled or already sent.")
                 }
             }
         }.start()
+        Log.d("SOS_TIMER", "Timer started.")
     }
-    // Function to manually trigger SOS after "Confirm"
-    fun sendSOSManually() {
-        if (!isRequestSent) {
-            isRequestSent = true // Set flag to prevent further requests
-            countdownTimer?.cancel() // Cancel the countdown timer if confirm is pressed early
-
-            coroutineScope.launch {
-                try {
-                    handleSOSTicket(firebaseUID ?: return@launch)
-                    val intent = Intent(context, SOSActivity::class.java)
-                    intent.putExtra("sosTicketId", sosTicketId)
+    // Unified function to handle SOS sending
+    fun sendSOS() {
+        coroutineScope.launch {
+            try {
+                handleSOSTicket(firebaseUID ?: return@launch)
+                if (sosTicketId != null) {
+                    val intent = Intent(context, SOSActivity::class.java).apply {
+                        putExtra("sosTicketId", sosTicketId)
+                    }
                     context.startActivity(intent)
-                } catch (e: Exception) {
-                    Log.e("SOS", "Failed to send SOS request", e)
+                } else {
+                    Log.e("SOS_TICKET", "SOS Ticket ID is null! Cannot proceed to SOSActivity.")
                 }
+            } catch (e: Exception) {
+                Log.e("SOS", "Failed to send SOS request", e)
+            } finally {
+                isSOSButtonEnabled = true // Re-enable the SOS button after the request
+                isLoading = false
+                isRequestSent = false
+                isProcessCompleted = true
+                isSOSButtonEnabled = true
             }
         }
     }
 
+
+    // Function to manually trigger SOS after "Confirm"
+    fun sendSOSManually() {
+        if (!isRequestSent) {
+            isRequestSent = true
+            countdownTimer?.cancel()
+            sendSOS()
+        }
+    }
 
     Box(modifier = Modifier.fillMaxHeight().fillMaxSize()) {
 
@@ -345,7 +364,7 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
                                         style = MaterialTheme.typography.titleMedium
                                     )
                                     Spacer(modifier = Modifier.height(8.dp))
-                                    Divider(color = Color.Gray)
+                                    HorizontalDivider(color = Color.Gray)
                                     Spacer(modifier = Modifier.height(8.dp))
 
                                     // Map type options
@@ -395,7 +414,7 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
 
                 }
 
-                if (showModal) {
+                if (showModal && !isRequestSent && isProcessCompleted) {
                     AlertDialog(
                         onDismissRequest = {},
                         title = { Text("Send SOS?") },
@@ -404,20 +423,37 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
                                 Text("SOS will be sent in $countdown seconds.")
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text("Do you want to cancel or confirm?")
+
+                                if (isLoading) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    CircularProgressIndicator() // Show loading indicator when waiting for response
+                                }
                             }
                         },
                         confirmButton = {
-                            Button(onClick = { sendSOSManually() }) {
+                            Button(
+                                onClick = {
+                                    isLoading = true
+                                    isProcessCompleted = false // Start SOS process
+                                    sendSOSManually() // Trigger SOS request
+                                },
+                                enabled = !isLoading
+                            ) {
                                 Text("Confirm")
                             }
                         },
                         dismissButton = {
-                            Button(onClick = {
-                                isSOSCanceled = true
-                                showModal = false
-                                countdownTimer?.cancel()
-                                isRequestSent = false
-                            }) {
+                            Button(
+                                onClick = {
+                                    isSOSCanceled = true
+                                    showModal = false
+                                    countdownTimer?.cancel()
+                                    isRequestSent = false
+                                    isLoading = false
+                                    isProcessCompleted = true // Reset process completion on cancel
+                                },
+                                enabled = !isLoading
+                            ) {
                                 Text("Cancel")
                             }
                         }

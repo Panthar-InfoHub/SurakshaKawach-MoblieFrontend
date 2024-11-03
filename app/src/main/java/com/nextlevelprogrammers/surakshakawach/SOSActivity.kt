@@ -28,7 +28,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -77,6 +79,7 @@ class SOSActivity : ComponentActivity() {
     private lateinit var locationCallback: LocationCallback
     private val imageUrls = mutableListOf<String>()
     private var isCameraExecutorInitialized = false
+    private var lastCaptureTimestamp = 0L // Store the last capture timestamp
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -106,9 +109,6 @@ class SOSActivity : ComponentActivity() {
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
 
         checkMultiplePermissionsAndStartUpdates()
-
-        // Get the SOS ticket ID passed from HomeScreen
-        sosTicketId = intent.getStringExtra("sosTicketId")
 
         // Start the service in foreground mode for background execution
         startSOSService()
@@ -172,32 +172,33 @@ class SOSActivity : ComponentActivity() {
         ContextCompat.startForegroundService(this, serviceIntent)
     }
 
-    private fun stopSOSService(onSuccess: () -> Unit, onError: (String) -> Unit) {
+    private fun stopSOSService(
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
         // Stop image capture
         stopCapturingImages()
-
-        // Stop audio recording
         stopAudioRecordingAtIntervals()
-
-        // Stop location updates
         fusedLocationClient.removeLocationUpdates(locationCallback)
 
-        // Make API call to close the ticket
+        // Close the ticket with API call
         sosTicketId?.let {
             closeSOSTicket(
                 onSuccess = {
-                    onSuccess() // Call success callback when ticket is closed
+                    onSuccess() // Signal success after closing
+                    navigateToHome(this@SOSActivity)
                 },
                 onError = { error ->
-                    onError(error) // Call error callback in case of failure
+                    onError(error) // Signal error if closing fails
                 }
             )
+        } ?: run {
+            onError("SOS Ticket ID is null.")
         }
 
         // Stop the SOS background service
         val stopIntent = Intent(this, SOSBackgroundService::class.java)
         stopService(stopIntent)
-
         Log.d("SOSActivity", "SOS service stopped.")
     }
 
@@ -247,6 +248,17 @@ class SOSActivity : ComponentActivity() {
     }
 
     private fun captureImage() {
+        val currentTimestamp = System.currentTimeMillis()
+
+        // Check if the interval has passed since the last capture
+        if (currentTimestamp - lastCaptureTimestamp < captureInterval) {
+            Log.d("CameraX", "Skipping capture to respect interval")
+            return
+        }
+
+        // Update the last capture timestamp
+        lastCaptureTimestamp = currentTimestamp
+
         val imageCapture = imageCapture ?: return
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val photoFile = File(externalMediaDirs.first(), "IMG_$timestamp.jpg")
@@ -593,6 +605,7 @@ fun SOSScreen(
     errorMessage: String?
 ) {
     val context = LocalContext.current
+    val isLoading = remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier.fillMaxSize(),
@@ -643,15 +656,25 @@ fun SOSScreen(
                 )
             }
 
-            // Button to stop SOS and close the ticket
+            // Stop SOS and Close Ticket button with loading state
             Button(
-                onClick = onCloseTicket,
-                modifier = Modifier.fillMaxWidth()
+                onClick = {
+                    isLoading.value = true // Set loading state
+                    onCloseTicket() // Trigger the close operation
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isLoading.value // Disable during loading
             ) {
-                Text(text = "Stop SOS and Close Ticket")
+                if (isLoading.value) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp)
+                    ) // Show loading spinner
+                } else {
+                    Text(text = "Stop SOS and Close Ticket")
+                }
             }
 
-            // Button to return to Home
+            // Return to Home button
             Button(
                 onClick = {
                     stopUpdatingCoordinates()
@@ -680,9 +703,5 @@ private fun stopUpdatingCoordinates() {
 private fun navigateToHome(context: Context) {
     val intent = Intent(context, HomeActivity::class.java)
     context.startActivity(intent)
-
-    // Finish the current activity to prevent back navigation
-    if (context is Activity) {
-        context.finish()
-    }
+    (context as? Activity)?.finish() // Finish the current activity
 }

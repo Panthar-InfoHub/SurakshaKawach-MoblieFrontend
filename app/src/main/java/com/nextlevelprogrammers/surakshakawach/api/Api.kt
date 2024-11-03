@@ -6,6 +6,7 @@ import com.nextlevelprogrammers.surakshakawach.api.UpdateEmergencyContactRequest
 import com.nextlevelprogrammers.surakshakawach.api.UserProfileResponse
 import com.nextlevelprogrammers.surakshakawach.api.AddAudioRequest
 import com.nextlevelprogrammers.surakshakawach.api.AddImageRequest
+import com.nextlevelprogrammers.surakshakawach.api.ApiResponse
 import com.nextlevelprogrammers.surakshakawach.api.TicketDetailsResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -18,11 +19,16 @@ import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
+import io.ktor.client.statement.readText
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.json.JSONException
+import org.json.JSONObject
 
 val client = HttpClient {
     install(ContentNegotiation) {
@@ -410,4 +416,50 @@ class Api {
         }
     }
 
+
+    suspend fun fetchTicketStatus(firebaseUID: String, ticketId: String): String? {
+        // Construct the URL
+        val url = "https://surakshakawach-mobilebackend-192854867616.asia-south2.run.app/api/v1/ticket?firebaseUID=$firebaseUID&ticketId=$ticketId"
+
+        // Log the values to verify correctness
+        Log.d("Api", "Requesting ticket status with URL: $url")
+        Log.d("Api", "firebaseUID: $firebaseUID, ticketId: $ticketId")
+
+        return try {
+            // Send the GET request
+            val response: HttpResponse = client.get(url)
+            val responseBody = response.bodyAsText()
+
+            // Log the entire response body for debugging
+            Log.d("Api", "Response Body: $responseBody")
+
+            if (response.status == HttpStatusCode.OK) {
+                // Try parsing the JSON using kotlinx.serialization with ignoreUnknownKeys set to true
+                try {
+                    val json = Json {
+                        ignoreUnknownKeys = true // Ignore unknown keys in the response JSON
+                    }
+                    val apiResponse = json.decodeFromString<ApiResponse>(responseBody)
+
+                    // Access the status field from the deserialized object
+                    val status = apiResponse.data.ticket.status
+                    Log.d("Api", "Fetched status: $status")
+                    return status
+                } catch (e: Exception) {
+                    Log.e("Api", "Deserialization error: ${e.localizedMessage}")
+                    return null
+                }
+            } else if (response.status == HttpStatusCode.NotFound) {
+                // Log specific error for 404
+                Log.e("Api", "Ticket not found for firebaseUID: $firebaseUID and ticketId: $ticketId")
+                return null
+            } else {
+                Log.e("Api", "Failed to fetch status. HTTP Status: ${response.status}")
+                return null
+            }
+        } catch (e: Exception) {
+            Log.e("Api", "Exception while fetching status: ${e.localizedMessage}")
+            return null
+        }
+    }
 }
