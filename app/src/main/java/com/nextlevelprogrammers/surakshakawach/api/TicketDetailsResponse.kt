@@ -30,9 +30,11 @@ data class ApiResponse(
 
 @Serializable
 data class DataContent(
-    val user: UserInfo, // Define if you need user data, otherwise you can skip it
-    val ticket: TicketDetailsResponse
+    val user: UserInfo? = null,    // Make user nullable
+    val ticket: TicketDetailsResponse? = null,  // Make ticket nullable
+    val locationInfo: LocationInfo? = null  // Include locationInfo as nullable for specific response
 )
+
 @Serializable
 data class UserInfo(
     val firebaseUID: String,
@@ -43,3 +45,7 @@ data class UserInfo(
     val tickets: List<String>
 )
 
+data class TicketInfo(
+    val status: String?,
+    val userName: String?
+)

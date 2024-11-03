@@ -7,7 +7,9 @@ import com.nextlevelprogrammers.surakshakawach.api.UserProfileResponse
 import com.nextlevelprogrammers.surakshakawach.api.AddAudioRequest
 import com.nextlevelprogrammers.surakshakawach.api.AddImageRequest
 import com.nextlevelprogrammers.surakshakawach.api.ApiResponse
+import com.nextlevelprogrammers.surakshakawach.api.Coordinates
 import com.nextlevelprogrammers.surakshakawach.api.TicketDetailsResponse
+import com.nextlevelprogrammers.surakshakawach.api.TicketInfo
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.ClientRequestException
@@ -417,49 +419,64 @@ class Api {
     }
 
 
-    suspend fun fetchTicketStatus(firebaseUID: String, ticketId: String): String? {
-        // Construct the URL
+    suspend fun fetchTicketStatus(firebaseUID: String, ticketId: String): TicketInfo? {
         val url = "https://surakshakawach-mobilebackend-192854867616.asia-south2.run.app/api/v1/ticket?firebaseUID=$firebaseUID&ticketId=$ticketId"
-
-        // Log the values to verify correctness
         Log.d("Api", "Requesting ticket status with URL: $url")
-        Log.d("Api", "firebaseUID: $firebaseUID, ticketId: $ticketId")
 
         return try {
-            // Send the GET request
             val response: HttpResponse = client.get(url)
             val responseBody = response.bodyAsText()
-
-            // Log the entire response body for debugging
             Log.d("Api", "Response Body: $responseBody")
 
             if (response.status == HttpStatusCode.OK) {
-                // Try parsing the JSON using kotlinx.serialization with ignoreUnknownKeys set to true
-                try {
-                    val json = Json {
-                        ignoreUnknownKeys = true // Ignore unknown keys in the response JSON
-                    }
-                    val apiResponse = json.decodeFromString<ApiResponse>(responseBody)
+                val json = Json { ignoreUnknownKeys = true }
+                val apiResponse = json.decodeFromString<ApiResponse>(responseBody)
 
-                    // Access the status field from the deserialized object
-                    val status = apiResponse.data.ticket.status
-                    Log.d("Api", "Fetched status: $status")
-                    return status
-                } catch (e: Exception) {
-                    Log.e("Api", "Deserialization error: ${e.localizedMessage}")
-                    return null
-                }
-            } else if (response.status == HttpStatusCode.NotFound) {
-                // Log specific error for 404
-                Log.e("Api", "Ticket not found for firebaseUID: $firebaseUID and ticketId: $ticketId")
-                return null
+                // Access user and ticket details
+                val status = apiResponse.data.ticket?.status
+                val userName = apiResponse.data.user?.displayName ?: "Unknown User"
+                Log.d("Api", "Fetched status: $status for user: $userName")
+
+                // Return as TicketInfo
+                return TicketInfo(status = status, userName = userName)
             } else {
-                Log.e("Api", "Failed to fetch status. HTTP Status: ${response.status}")
-                return null
+                Log.e("Api", "Failed to fetch ticket status. HTTP Status: ${response.status}")
+                null
             }
         } catch (e: Exception) {
             Log.e("Api", "Exception while fetching status: ${e.localizedMessage}")
-            return null
+            null
+        }
+    }
+
+    suspend fun fetchLatestLocation(firebaseUID: String, ticketId: String): Coordinates? {
+        val url = "https://surakshakawach-mobilebackend-192854867616.asia-south2.run.app/api/v1/ticket/latest-update?firebaseUID=$firebaseUID&ticketId=$ticketId"
+        Log.d("Api", "Requesting latest coordinates with URL: $url")
+
+        return try {
+            val response: HttpResponse = client.get(url)
+            val responseBody = response.bodyAsText()
+            Log.d("Api", "Response Body: $responseBody")
+
+            if (response.status == HttpStatusCode.OK) {
+                val json = Json { ignoreUnknownKeys = true }
+                val apiResponse = json.decodeFromString<ApiResponse>(responseBody)
+
+                // Access coordinates from locationInfo if available
+                val latestCoordinates = apiResponse.data.locationInfo?.coordinates
+                if (latestCoordinates != null) {
+                    Log.d("Api", "Fetched coordinates: ${latestCoordinates.latitude}, ${latestCoordinates.longitude}")
+                } else {
+                    Log.e("Api", "Location info not found in response.")
+                }
+                return latestCoordinates
+            } else {
+                Log.e("Api", "Failed to fetch latest coordinates. HTTP Status: ${response.status}")
+                null
+            }
+        } catch (e: Exception) {
+            Log.e("Api", "Exception while fetching latest coordinates: ${e.localizedMessage}")
+            null
         }
     }
 }
