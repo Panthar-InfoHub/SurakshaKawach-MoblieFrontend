@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,40 +27,49 @@ import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.FirebaseAuth
 import com.nextlevelprogrammers.surakshakawach.api.EmergencyContact
 import kotlinx.coroutines.launch
+import androidx.compose.material3.pulltorefresh.PullToRefreshState
+import androidx.compose.material3.pulltorefresh.pullToRefresh
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import kotlinx.coroutines.CoroutineScope
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EmergencyContactsScreen() {
     val context = LocalContext.current
-
-    // Get the logged-in user's Firebase UID
     val firebaseUID = FirebaseAuth.getInstance().currentUser?.uid
 
-    // If firebaseUID is null, we assume the user is not logged in
     if (firebaseUID == null) {
         Toast.makeText(context, "User not logged in", Toast.LENGTH_SHORT).show()
         return
     }
 
-    // State to hold emergency contacts
     var emergencyContacts by remember { mutableStateOf(listOf<EmergencyContact>()) }
-
-    // State to handle showing the dialog for adding new contacts
     var showDialog by remember { mutableStateOf(false) }
-
-    // State for the input fields in the add dialog
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var mobile by remember { mutableStateOf("") }
-
-    // Coroutine scope to handle background tasks
+    var loading by remember { mutableStateOf(true) }
+    var isRefreshing by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
 
-    // Fetch emergency contacts from the server
-    LaunchedEffect(Unit) {
-        loadContacts(firebaseUID, context, coroutineScope) { contacts ->
-            emergencyContacts = contacts
+    // Define the pull-to-refresh state
+    val pullToRefreshState = rememberPullToRefreshState()
+
+// Function to refresh contacts from the server
+    val onRefresh: () -> Unit = {
+        isRefreshing = true
+        coroutineScope.launch {
+            loadContacts(firebaseUID, context, coroutineScope) { contacts ->
+                emergencyContacts = contacts
+                isRefreshing = false
+                loading = false
+            }
         }
+    }
+
+    // Initial load of contacts
+    LaunchedEffect(Unit) {
+        onRefresh()
     }
 
     Box(
@@ -68,61 +78,62 @@ fun EmergencyContactsScreen() {
             .background(Color.White)
             .padding(16.dp)
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Top
-        ) {
-            Text(
-                text = "Emergency Contacts",
-                style = MaterialTheme.typography.headlineMedium.copy(
-                    fontWeight = FontWeight.Bold
-                ),
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
-
-            // Display contacts in a list
-            LazyColumn {
-                items(emergencyContacts.size) { index ->
-                    val contact = emergencyContacts[index]
-                    ContactCard(contact, onUpdate = { updatedContact ->
-                        // Update the contact in the list and refresh the state
-                        emergencyContacts = emergencyContacts.map {
-                            if (it == contact) updatedContact else it
-                        }
-                        // Optionally, send the updated contact to the backend API
-                        coroutineScope.launch {
-                            val isSuccess = Api().updateEmergencyContacts(
-                                firebaseUID = firebaseUID,
-                                oldContacts = listOf(contact),  // Old contact details
-                                newContacts = listOf(updatedContact)  // Updated contact details
-                            )
-                            if (isSuccess) {
-                                Toast.makeText(context, "Contact updated successfully", Toast.LENGTH_SHORT).show()
-                            } else {
-                                Toast.makeText(context, "Failed to update contact", Toast.LENGTH_SHORT).show()
+        if (loading) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        } else {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Top
+            ) {
+                LazyColumn {
+                    items(emergencyContacts.size) { index ->
+                        val contact = emergencyContacts[index]
+                        ContactCard(
+                            contact,
+                            onUpdate = { updatedContact ->
+                                emergencyContacts = emergencyContacts.map {
+                                    if (it == contact) updatedContact else it
+                                }
+                                coroutineScope.launch {
+                                    val isSuccess = Api().updateEmergencyContacts(
+                                        firebaseUID = firebaseUID,
+                                        oldContacts = listOf(contact),
+                                        newContacts = listOf(updatedContact)
+                                    )
+                                    if (isSuccess) {
+                                        onRefresh()
+                                        Toast.makeText(context, "Contact updated successfully", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(context, "Failed to update contact", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            },
+                            onDelete = { contactToDelete ->
+                                coroutineScope.launch {
+                                    val isSuccess = Api().removeEmergencyContacts(
+                                        firebaseUID = firebaseUID,
+                                        contactDetails = listOf(contactToDelete)
+                                    )
+                                    if (isSuccess) {
+                                        onRefresh()
+                                        Toast.makeText(context, "${contactToDelete.name} deleted successfully", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(context, "Failed to delete ${contactToDelete.name}", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
                             }
-                        }
-                    }, onDelete = { contactToDelete ->
-                        // Remove the contact from the list after deletion
-                        coroutineScope.launch {
-                            val isSuccess = Api().removeEmergencyContacts(
-                                firebaseUID = firebaseUID,
-                                contactDetails = listOf(contactToDelete)
-                            )
-                            if (isSuccess) {
-                                emergencyContacts = emergencyContacts.filter { it != contactToDelete }
-                                Toast.makeText(context, "${contactToDelete.name} deleted successfully", Toast.LENGTH_SHORT).show()
-                            } else {
-                                Toast.makeText(context, "Failed to delete ${contactToDelete.name}", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    })
+                        )
+                    }
+                }
+                if (isRefreshing) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
             }
         }
 
-        // FAB for adding a new contact
         FloatingActionButton(
             onClick = { showDialog = true },
             modifier = Modifier
@@ -132,39 +143,35 @@ fun EmergencyContactsScreen() {
             Icon(Icons.Default.Add, contentDescription = "Add Emergency Contact")
         }
 
-        // Popup dialog for adding a new contact
         if (showDialog) {
             AlertDialog(
                 onDismissRequest = { showDialog = false },
                 title = { Text("Add Emergency Contact") },
                 text = {
                     Column {
-                        TextField(
-                            value = name,
-                            onValueChange = { name = it },
-                            label = { Text("Name") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        TextField(value = name, onValueChange = { name = it }, label = { Text("Name") })
                         Spacer(modifier = Modifier.height(8.dp))
-                        TextField(
-                            value = email,
-                            onValueChange = { email = it },
-                            label = { Text("Email") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        TextField(value = email, onValueChange = { email = it }, label = { Text("Email") })
                         Spacer(modifier = Modifier.height(8.dp))
-                        TextField(
-                            value = mobile,
-                            onValueChange = { mobile = it },
-                            label = { Text("Phone Number") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        TextField(value = mobile, onValueChange = { mobile = it }, label = { Text("Phone Number") })
                     }
                 },
                 confirmButton = {
                     Button(
                         onClick = {
-                            // Send the contact to the backend using Ktor
+                            val isDuplicate = emergencyContacts.any {
+                                it.email == email || it.mobile == mobile
+                            }
+
+                            if (isDuplicate) {
+                                Toast.makeText(
+                                    context,
+                                    "Contact with this email or phone number already exists",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                return@Button
+                            }
+
                             coroutineScope.launch {
                                 try {
                                     val isSuccess = Api().sendEmergencyContactToServer(
@@ -173,17 +180,13 @@ fun EmergencyContactsScreen() {
                                         email,
                                         mobile
                                     )
-                                    Log.d("API_RESPONSE", "Success: $isSuccess")
-
                                     if (isSuccess) {
                                         Toast.makeText(
                                             context,
                                             "Contact added successfully",
                                             Toast.LENGTH_SHORT
                                         ).show()
-                                        // Add the new contact to the list and update state
-                                        emergencyContacts = emergencyContacts + EmergencyContact(name, email, mobile)
-                                        // Reset fields and close the dialog
+                                        onRefresh()
                                         name = ""
                                         email = ""
                                         mobile = ""
@@ -209,11 +212,7 @@ fun EmergencyContactsScreen() {
                         Text("Add")
                     }
                 },
-                dismissButton = {
-                    TextButton(onClick = { showDialog = false }) {
-                        Text("Cancel")
-                    }
-                }
+                dismissButton = { TextButton(onClick = { showDialog = false }) { Text("Cancel") } }
             )
         }
     }
@@ -245,11 +244,10 @@ private fun loadContacts(
 fun ContactCard(contact: EmergencyContact, onUpdate: (EmergencyContact) -> Unit, onDelete: (EmergencyContact) -> Unit) {
     var offsetX by remember { mutableFloatStateOf(0f) }
     val maxOffset = 120f
-    val animatedOffsetX by animateDpAsState(targetValue = offsetX.dp, label = "")
+    val animatedOffsetX by animateDpAsState(targetValue = offsetX.dp)
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    // State to handle showing the dialog for editing contacts
     var showEditDialog by remember { mutableStateOf(false) }
     var updatedName by remember { mutableStateOf(contact.name) }
     var updatedEmail by remember { mutableStateOf(contact.email) }
@@ -263,31 +261,15 @@ fun ContactCard(contact: EmergencyContact, onUpdate: (EmergencyContact) -> Unit,
                 detectHorizontalDragGestures(
                     onHorizontalDrag = { change, dragAmount ->
                         change.consume()
-
-                        // Scale the drag amount to make the swipe more noticeable
                         val dragSensitivity = 1.5f
                         val scaledDragAmount = dragAmount * dragSensitivity
-
-                        // Calculate the new offsetX with resistance beyond maxOffset
                         val newOffsetX = (offsetX + scaledDragAmount).coerceIn(-maxOffset * 1.2f, 0f)
-
-                        // Apply resistance beyond the maximum offset
-                        offsetX = if (newOffsetX < -maxOffset) {
-                            -maxOffset + (newOffsetX + maxOffset) / 3 // Add resistance
-                        } else {
-                            newOffsetX
-                        }
+                        offsetX = if (newOffsetX < -maxOffset) -maxOffset + (newOffsetX + maxOffset) / 3 else newOffsetX
                     },
-                    onDragEnd = {
-                        // Snap back to position if not dragged far enough
-                        if (offsetX > -maxOffset / 2) {
-                            offsetX = 0f
-                        }
-                    }
+                    onDragEnd = { if (offsetX > -maxOffset / 2) offsetX = 0f }
                 )
             }
     ) {
-        // Background card with Edit and Delete icons
         Card(
             shape = RoundedCornerShape(8.dp),
             elevation = CardDefaults.cardElevation(4.dp),
@@ -305,80 +287,41 @@ fun ContactCard(contact: EmergencyContact, onUpdate: (EmergencyContact) -> Unit,
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Edit button
-                IconButton(
-                    onClick = { showEditDialog = true },
-                ) {
+                IconButton(onClick = { showEditDialog = true }) {
                     Icon(Icons.Default.Edit, contentDescription = "Edit", tint = Color(0xFF4CAF50))
                 }
 
-                // Modal Dialog for editing contact details
                 if (showEditDialog) {
                     AlertDialog(
                         onDismissRequest = { showEditDialog = false },
                         title = { Text("Edit Contact") },
                         text = {
                             Column {
-                                TextField(
-                                    value = updatedName,
-                                    onValueChange = { updatedName = it },
-                                    label = { Text("Name") }
-                                )
+                                TextField(value = updatedName, onValueChange = { updatedName = it }, label = { Text("Name") })
                                 Spacer(modifier = Modifier.height(8.dp))
-                                TextField(
-                                    value = updatedEmail,
-                                    onValueChange = { updatedEmail = it },
-                                    label = { Text("Email") }
-                                )
+                                TextField(value = updatedEmail, onValueChange = { updatedEmail = it }, label = { Text("Email") })
                                 Spacer(modifier = Modifier.height(8.dp))
-                                TextField(
-                                    value = updatedMobile,
-                                    onValueChange = { updatedMobile = it },
-                                    label = { Text("Mobile") }
-                                )
+                                TextField(value = updatedMobile, onValueChange = { updatedMobile = it }, label = { Text("Mobile") })
                             }
                         },
                         confirmButton = {
-                            Button(
-                                onClick = {
-                                    // Create an updated contact object and pass to onUpdate
-                                    val updatedContact = EmergencyContact(
-                                        name = updatedName,
-                                        email = updatedEmail,
-                                        mobile = updatedMobile
-                                    )
-                                    onUpdate(updatedContact)
-                                    showEditDialog = false
-                                }
-                            ) {
-                                Text("Update")
-                            }
+                            Button(onClick = {
+                                onUpdate(EmergencyContact(updatedName, updatedEmail, updatedMobile))
+                                showEditDialog = false
+                            }) { Text("Update") }
                         },
-                        dismissButton = {
-                            Button(onClick = { showEditDialog = false }) {
-                                Text("Cancel")
-                            }
-                        }
+                        dismissButton = { Button(onClick = { showEditDialog = false }) { Text("Cancel") } }
                     )
                 }
 
                 Spacer(modifier = Modifier.width(8.dp))
 
-                // Delete button with API integration
-                IconButton(
-                    onClick = {
-                        scope.launch {
-                            Toast.makeText(context, "Deleting ${contact.name}", Toast.LENGTH_SHORT).show()
-                            onDelete(contact) // Call the onDelete function when deleting a contact
-                        }
-                    },
-                ) {
+                IconButton(onClick = { scope.launch { onDelete(contact) } }) {
                     Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color(0xFFF44336))
                 }
             }
         }
 
-        // Foreground with the contact card, swiping over the buttons
         Card(
             shape = RoundedCornerShape(8.dp),
             elevation = CardDefaults.cardElevation(4.dp),

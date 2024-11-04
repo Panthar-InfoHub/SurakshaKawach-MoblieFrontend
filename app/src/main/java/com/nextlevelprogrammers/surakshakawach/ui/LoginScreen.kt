@@ -69,10 +69,20 @@ class LoginScreen : ComponentActivity() {
                         selectedGender = gender
                     },
                     onSignInClick = {
-                        signInWithGoogle(false) // Only check if the user exists
+                        // Check if gender is selected before sign-in
+                        if (selectedGender != null) {
+                            signInWithGoogle(false)
+                        } else {
+                            Toast.makeText(this, "Please select a gender before signing in.", Toast.LENGTH_SHORT).show()
+                        }
                     },
                     onCreateAccountClick = {
-                        signInWithGoogle(true) // Sign in and create a new account
+                        // Check if gender is selected before account creation
+                        if (selectedGender != null) {
+                            signInWithGoogle(true)
+                        } else {
+                            Toast.makeText(this, "Please select a gender before creating an account.", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 )
             }
@@ -286,10 +296,11 @@ fun LoginScreenUI(
         }
 
         Spacer(modifier = Modifier.height(16.dp))
-
+        
         // Google Sign-In Button for Sign In
         Button(
             onClick = onSignInClick,
+            enabled = selectedGender != null, // Disable button if gender is not selected
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
@@ -302,6 +313,7 @@ fun LoginScreenUI(
         // Google Sign-In Button for Creating an Account
         Button(
             onClick = onCreateAccountClick,
+            enabled = selectedGender != null, // Disable button if gender is not selected
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
@@ -310,6 +322,7 @@ fun LoginScreenUI(
         ) {
             Text(text = "Create Account with Google")
         }
+
 
         Spacer(modifier = Modifier.height(40.dp))
     }

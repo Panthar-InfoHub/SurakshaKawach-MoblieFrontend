@@ -15,8 +15,8 @@ android {
         applicationId = "com.nextlevelprogrammers.surakshakawach"
         minSdk = 27
         targetSdk = 34
-        versionCode = 10
-        versionName = "1.4.1.0"
+        versionCode = 11
+        versionName = "1.4.1.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -108,5 +108,5 @@ dependencies {
     implementation (libs.firebase.storage)
     implementation (libs.integrity)
     implementation("io.coil-kt:coil-compose:2.7.0")
-
+    implementation ("androidx.compose.material3:material3:1.3.1")
 }

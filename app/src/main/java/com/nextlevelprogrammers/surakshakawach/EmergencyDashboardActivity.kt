@@ -5,7 +5,6 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -18,11 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.rememberImagePainter
@@ -37,10 +33,10 @@ import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
-import com.nextlevelprogrammers.surakshakawach.ui.theme.SurakshaKawachTheme
-import kotlinx.coroutines.launch
 import com.nextlevelprogrammers.surakshakawach.api.Coordinates
-import com.nextlevelprogrammers.surakshakawach.ui.BottomNavBar
+import com.nextlevelprogrammers.surakshakawach.ui.theme.SurakshaKawachTheme
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class EmergencyDashboardActivity : ComponentActivity() {
 
@@ -75,7 +71,7 @@ fun EmergencyDashboardScreen(ticketId: String?, firebaseUID: String?) {
     var selectedTab by remember { mutableStateOf("Map") }
     val coroutineScope = rememberCoroutineScope()
 
-    // Fetch ticket and user data
+    // Fetch ticket and user data initially
     LaunchedEffect(ticketId, firebaseUID) {
         if (ticketId != null && firebaseUID != null) {
             coroutineScope.launch {
@@ -83,6 +79,18 @@ fun EmergencyDashboardScreen(ticketId: String?, firebaseUID: String?) {
                 ticketStatus = ticketInfo?.status ?: "Unknown"
                 userName = ticketInfo?.userName ?: "Unknown User"
                 coordinates = Api().fetchLatestLocation(firebaseUID, ticketId)
+            }
+        }
+    }
+
+    // Fetch the latest location coordinates every 10 seconds
+    LaunchedEffect(ticketId, firebaseUID) {
+        if (ticketId != null && firebaseUID != null) {
+            while (true) {
+                coroutineScope.launch {
+                    coordinates = Api().fetchLatestLocation(firebaseUID, ticketId)
+                }
+                delay(10000L) // 10-second delay
             }
         }
     }
@@ -191,6 +199,12 @@ fun FullScreenMap(latitude: Double, longitude: Double, userName: String) {
     }
 
     val markerState = remember { MarkerState(position = LatLng(latitude, longitude)) }
+
+    // Update marker position if coordinates change
+    LaunchedEffect(latitude, longitude) {
+        markerState.position = LatLng(latitude, longitude)
+        cameraPositionState.position = CameraPosition.fromLatLngZoom(markerState.position, 15f)
+    }
 
     GoogleMap(
         modifier = Modifier.fillMaxSize(),
