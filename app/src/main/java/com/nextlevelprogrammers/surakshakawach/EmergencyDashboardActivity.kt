@@ -168,7 +168,7 @@ fun EmergencyDashboardScreen(ticketId: String?, firebaseUID: String?) {
                         .size(12.dp)
                         .background(statusColor, shape = CircleShape)
                         .align(Alignment.TopEnd)
-                        .offset(4.dp, -4.dp)
+                        .offset(4.dp, (-4).dp)
                 )
             }
 
@@ -195,15 +195,21 @@ fun EmergencyDashboardScreen(ticketId: String?, firebaseUID: String?) {
 @Composable
 fun FullScreenMap(latitude: Double, longitude: Double, userName: String) {
     val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(LatLng(latitude, longitude), 15f)
+        position = CameraPosition.fromLatLngZoom(LatLng(latitude, longitude), 17f) // Default zoom level
     }
 
     val markerState = remember { MarkerState(position = LatLng(latitude, longitude)) }
+    var isZoomInitialized by remember { mutableStateOf(false) } // Track if zoom is already set
 
-    // Update marker position if coordinates change
+    // Update marker position if coordinates change, but keep the initial zoom level
     LaunchedEffect(latitude, longitude) {
         markerState.position = LatLng(latitude, longitude)
-        cameraPositionState.position = CameraPosition.fromLatLngZoom(markerState.position, 15f)
+        if (!isZoomInitialized) { // Set zoom level only once
+            cameraPositionState.position = CameraPosition.fromLatLngZoom(markerState.position, 17f)
+            isZoomInitialized = true // Mark zoom as initialized
+        } else {
+            cameraPositionState.position = CameraPosition.fromLatLngZoom(markerState.position, cameraPositionState.position.zoom)
+        }
     }
 
     GoogleMap(
