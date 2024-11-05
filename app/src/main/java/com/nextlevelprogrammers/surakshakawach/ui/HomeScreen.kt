@@ -315,7 +315,7 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
                                     modifier = Modifier.fillMaxSize(),
                                     cameraPositionState = cameraPositionState,
                                     uiSettings = MapUiSettings(zoomControlsEnabled = false),
-                                    properties = MapProperties(mapType = MapType.NORMAL)
+                                    properties = MapProperties(mapType = mapType)
                                 ) {
                                     // Place marker at the user's current location
                                     Marker(
