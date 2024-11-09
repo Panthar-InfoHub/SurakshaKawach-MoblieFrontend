@@ -17,12 +17,16 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
-    <!-- New permission required for using camera in foreground service on Android 14 and above -->
+    <!-- Required for using microphone in foreground service on Android 14+ -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+
+    <!-- Optional additional permissions for camera and location in foreground service -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 
-    <!-- Health Connect Permission -->
+    <!-- Health Connect Permissions -->
     <uses-permission android:name="android.permission.health.READ_HEART_RATE"/>
     <uses-permission android:name="android.permission.health.WRITE_HEART_RATE"/>
     <uses-permission android:name="android.permission.health.READ_STEPS"/>
@@ -106,11 +110,17 @@
 
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="AIzaSyDGXH-dOUFfd_FdeQDeFHJe2kyk8gsePEY" />
+            android:value="AIzaSyCc2303_jhx_vQKD2j-KyaPR_P7YApKsnw" />
 
         <meta-data
             android:name="androidx.camera.default.impl"
             android:value="androidx.camera.camera2.Camera2Config" />
+
+
+        <service
+            android:name=".VoiceRecognitionService"
+            android:exported="true"
+            android:foregroundServiceType="microphone" />
 
 
     </application>

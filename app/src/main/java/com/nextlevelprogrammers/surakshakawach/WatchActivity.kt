@@ -7,32 +7,21 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.google.android.gms.maps.model.CameraPosition
-import com.google.android.gms.maps.model.LatLng
-import com.google.android.gms.maps.model.TileOverlayOptions
-import com.google.maps.android.compose.GoogleMap
-import com.google.maps.android.compose.MapEffect
-import com.google.maps.android.compose.MapsComposeExperimentalApi
-import com.google.maps.android.compose.rememberCameraPositionState
-import com.google.maps.android.heatmaps.HeatmapTileProvider
-import com.google.maps.android.heatmaps.WeightedLatLng
 import com.nextlevelprogrammers.surakshakawach.ui.theme.SurakshaKawachTheme
-import kotlin.random.Random
 
 class WatchActivity : ComponentActivity() {
 
@@ -41,37 +30,30 @@ class WatchActivity : ComponentActivity() {
 
         setContent {
             SurakshaKawachTheme {
-                WatchScreen(modifier = Modifier.background(Color.White))
+                WatchScreen(modifier = Modifier.background(Color(0xFF121212)), onBackPress = { finish() })
             }
         }
     }
 }
 
-fun generateMockLocationData(): List<LatLng> {
-    return listOf(
-        LatLng(28.6139, 77.2090), // New Delhi
-        LatLng(19.0760, 72.8777), // Mumbai
-        LatLng(22.5726, 88.3639), // Kolkata
-        LatLng(13.0827, 80.2707), // Chennai
-        LatLng(12.9716, 77.5946), // Bangalore
-        LatLng(17.3850, 78.4867), // Hyderabad
-        LatLng(23.0225, 72.5714), // Ahmedabad
-        LatLng(26.9124, 75.7873), // Jaipur
-        LatLng(21.1702, 72.8311), // Surat
-        LatLng(15.2993, 74.1240)  // Goa
-    )
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WatchScreen(modifier: Modifier = Modifier) {
-    // Mock data for heart rate and steps
-    val mockHeartRateData = listOf(72, 75, 78, 76, 74, 77, 73) // Replace with actual data if available
-    val mockStepsData = listOf(1000, 1200, 1100, 1050, 1300, 1150, 1250) // Replace with actual data if available
-
+fun WatchScreen(modifier: Modifier = Modifier, onBackPress: () -> Unit) {
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Health Watch Data", color = Color.Black) })
+            TopAppBar(
+                title = { Text(text = "January 2024", color = Color.White, fontSize = 20.sp) },
+                navigationIcon = {
+                    IconButton(onClick = onBackPress) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.baseline_arrow_back_24),
+                            contentDescription = "Back",
+                            tint = Color.White
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF1E1E2E))
+            )
         },
         content = { paddingValues ->
             LazyColumn(
@@ -82,48 +64,11 @@ fun WatchScreen(modifier: Modifier = Modifier) {
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 item {
-                    Text(
-                        text = "Heart Rate",
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black
-                    )
-                    Text(
-                        text = "BPM: ${mockHeartRateData.lastOrNull() ?: "N/A"}",
-                        fontSize = 18.sp,
-                        color = Color.DarkGray
-                    )
+                    FitnessSummaryCard()
                     Spacer(modifier = Modifier.height(16.dp))
-                    BarChart(
-                        data = mockHeartRateData,
-                        barColor = Color.Red
-                    )
-
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    Text(
-                        text = "Steps",
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black
-                    )
-                    Text(
-                        text = "Total Steps: ${mockStepsData.sum()}",
-                        fontSize = 18.sp,
-                        color = Color.DarkGray
-                    )
+                    HealthTrackerCard()
                     Spacer(modifier = Modifier.height(16.dp))
-                    BarChart(data = mockStepsData, barColor = Color.Green)
-
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    Text(
-                        text = "Crowd Location Heatmap",
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Black
-                    )
-                    HeatMapOverlay(points = generateMockLocationData())
+                    HealthGoalsCard()
                 }
             }
         }
@@ -131,70 +76,263 @@ fun WatchScreen(modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun BarChart(
-    data: List<Int>,
-    modifier: Modifier = Modifier,
-    barColor: Color = Color.Blue,
-    maxBarHeight: Float = 200f,
-    barWidth: Float = 40f,
-    barSpacing: Float = 16f
-) {
-    val maxValue = data.maxOrNull() ?: 0
+fun FitnessSummaryCard() {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(8.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E2E)),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Top row with date and dropdown arrow
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Start
+            ) {
+                Text(
+                    text = "Jan 2024",
+                    fontSize = 16.sp,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_drop_down),
+                    contentDescription = "Dropdown",
+                    tint = Color.White
+                )
+            }
 
-    Canvas(modifier = modifier
-        .fillMaxWidth()
-        .height(200.dp)) {
+            Spacer(modifier = Modifier.height(16.dp))
 
-        data.forEachIndexed { index, value ->
-            val barHeight = (value.toFloat() / maxValue * maxBarHeight)
-            val xOffset = index * (barWidth + barSpacing)
+            // Large circular progress chart
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.size(150.dp)
+            ) {
+                CircularProgressIndicatorComponent(0.6f, Color.Blue, 12f) // Outer ring for Calories
+                CircularProgressIndicatorComponent(0.4f, Color(0xFFFF9800), 12f) // Middle ring for Move minutes
+                CircularProgressIndicatorComponent(0.2f, Color.Yellow, 12f) // Inner ring for Weekly Goal
+            }
 
-            drawRoundRect(
-                color = barColor,
-                topLeft = Offset(x = xOffset, y = size.height - barHeight),
-                size = Size(width = barWidth, height = barHeight),
-                cornerRadius = CornerRadius(8f, 8f)
-            )
+            Spacer(modifier = Modifier.height(16.dp))
 
-            drawContext.canvas.nativeCanvas.apply {
-                drawText(
-                    value.toString(),
-                    xOffset + (barWidth / 4),
-                    size.height - barHeight - 10,
-                    android.graphics.Paint().apply {
-                        textSize = 30f
-                        color = android.graphics.Color.BLACK
-                        textAlign = android.graphics.Paint.Align.LEFT
-                    }
+            // Bottom row with icons, values, and labels
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                MetricItem(
+                    icon = R.drawable.ic_calories, // Replace with your calorie icon
+                    value = "30/50",
+                    label = "Calories",
+                    color = Color.Blue
+                )
+                MetricItem(
+                    icon = R.drawable.ic_move_minutes, // Replace with your move minutes icon
+                    value = "20/50",
+                    label = "Move minutes",
+                    color = Color(0xFFFF9800)
+                )
+                MetricItem(
+                    icon = R.drawable.weekly, // Replace with your weekly goal icon
+                    value = "15/50",
+                    label = "Weekly Goal",
+                    color = Color.Yellow
                 )
             }
         }
     }
 }
 
-@OptIn(MapsComposeExperimentalApi::class)
 @Composable
-fun HeatMapOverlay(points: List<LatLng>) {
-    val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(LatLng(20.5937, 78.9629), 4.5f)
+fun CircularProgressIndicatorComponent(f: Float, blue: Color, f1: Float) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier.size(120.dp) // Adjust size as needed
+    ) {
+        // Outer ring for Calories
+        SingleArc(progress = 0.6f, color = Color.Blue, size = 120.dp, strokeWidth = 12f)
+        // Middle ring for Move Minutes with a slight size reduction to create a gap
+        SingleArc(progress = 0.4f, color = Color(0xFFFF9800), size = 100.dp, strokeWidth = 12f)
+        // Inner ring for Weekly Goal with further size reduction for another gap
+        SingleArc(progress = 0.2f, color = Color.Yellow, size = 80.dp, strokeWidth = 12f)
     }
+}
 
-    val weightedLatLngs = points.map { WeightedLatLng(it, Random.nextDouble(0.5, 1.5)) }
-    val heatmapTileProvider = remember(weightedLatLngs) {
-        HeatmapTileProvider.Builder()
-            .weightedData(weightedLatLngs)
-            .radius(50)
-            .build()
+@Composable
+fun SingleArc(progress: Float, color: Color, size: Dp, strokeWidth: Float) {
+    Canvas(modifier = Modifier.size(size)) {
+        drawArc(
+            color = color,
+            startAngle = -90f,
+            sweepAngle = 360 * progress,
+            useCenter = false,
+            style = Stroke(width = strokeWidth.dp.toPx(), cap = StrokeCap.Round)
+        )
     }
+}
 
-    GoogleMap(
+@Composable
+fun MetricItem(icon: Int, value: String, label: String, color: Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(
+            painter = painterResource(id = icon),
+            contentDescription = label,
+            tint = color,
+            modifier = Modifier.size(24.dp)
+        )
+        Text(text = value, fontSize = 14.sp, color = Color.White)
+        Text(text = label, fontSize = 12.sp, color = Color.Gray)
+    }
+}
+
+@Composable
+fun HealthTrackerCard() {
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(300.dp),
-        cameraPositionState = cameraPositionState
+            .padding(8.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E2E)),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
     ) {
-        MapEffect(heatmapTileProvider) { map ->
-            map.addTileOverlay(TileOverlayOptions().tileProvider(heatmapTileProvider))
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.Start
+        ) {
+            // Title and subtitle
+            Text(
+                text = "Health Tracker",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+            Text(
+                text = "Last 7 days",
+                fontSize = 12.sp,
+                color = Color.Gray
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Achieved progress text
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "3/7",
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF42A5F5) // Blue color for progress
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "Achieved",
+                    fontSize = 14.sp,
+                    color = Color(0xFF42A5F5)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Days of the week with status indicators
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceAround
+            ) {
+                val days = listOf("F", "S", "S", "M", "T", "W", "T")
+                val achievedStatus = listOf(true, true, false, true, true, false, true) // Example status for each day
+
+                days.forEachIndexed { index, day ->
+                    DayStatusIndicator(day = day, isAchieved = achievedStatus[index])
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DayStatusIndicator(day: String, isAchieved: Boolean) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.size(30.dp) // Adjust size if needed
+        ) {
+            Canvas(modifier = Modifier.size(24.dp)) {
+                drawCircle(
+                    color = if (isAchieved) Color(0xFF42A5F5) else Color(0xFF212121), // Blue for achieved, dark gray for not achieved
+                    radius = size.minDimension / 2
+                )
+            }
+            if (isAchieved) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_check), // Replace with your check icon
+                    contentDescription = "Achieved",
+                    tint = Color.White,
+                    modifier = Modifier.size(16.dp)
+                )
+            } else {
+                Canvas(modifier = Modifier.size(12.dp)) {
+                    drawCircle(color = Color(0xFFFF9800), radius = size.minDimension / 2) // Orange inner circle for not achieved
+                }
+            }
+        }
+        Text(day, fontSize = 10.sp, color = Color.LightGray)
+    }
+}
+
+@Composable
+fun HealthGoalsCard() {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(8.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E2E)),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.Start
+        ) {
+            Text(
+                text = "Your Health Goals",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            GoalBar(label = "Calories", percentage = 75)
+            GoalBar(label = "Steps Taken", percentage = 80)
+            GoalBar(label = "Active Minutes", percentage = 65)
+        }
+    }
+}
+
+@Composable
+fun GoalBar(label: String, percentage: Int) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(label, color = Color.White, fontSize = 14.sp)
+            Text("$percentage%", color = Color.White, fontSize = 14.sp)
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Canvas(modifier = Modifier.fillMaxWidth().height(8.dp)) {
+            val progressWidth = size.width * (percentage / 100f)
+            drawRoundRect(
+                color = Color.Gray,
+                size = Size(size.width, 8f),
+                cornerRadius = CornerRadius(4f, 4f)
+            )
+            drawRoundRect(
+                color = Color(0xFFFF9800),
+                size = Size(progressWidth, 8f),
+                cornerRadius = CornerRadius(4f, 4f)
+            )
         }
     }
 }

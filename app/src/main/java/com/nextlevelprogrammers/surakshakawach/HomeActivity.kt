@@ -1,8 +1,16 @@
 package com.nextlevelprogrammers.surakshakawach
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.Build
 import android.os.Bundle
+import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.annotation.RequiresApi
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -20,44 +28,76 @@ class HomeActivity : ComponentActivity() {
     // Declare FusedLocationProviderClient
     private lateinit var fusedLocationClient: FusedLocationProviderClient
 
+    // Callback to trigger SOS action in HomeScreen
+    private var triggerSOSAction: (() -> Unit)? = null
+
+    // Broadcast receiver for wake word detection
+    private val wakeWordReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == "com.nextlevelprogrammers.surakshakawach.WAKE_WORD_DETECTED") {
+                Log.d("HomeActivity", "Wake word detected! Triggering SOS action.")
+                Toast.makeText(context, "Wake word detected!", Toast.LENGTH_SHORT).show()
+                triggerSOSAction?.invoke() // Trigger SOS action if available
+            }
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         // Initialize the FusedLocationProviderClient
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
 
+        // Register the broadcast receiver
+        val filter = IntentFilter("com.nextlevelprogrammers.surakshakawach.WAKE_WORD_DETECTED")
+        registerReceiver(wakeWordReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+
+        // Start the VoiceRecognitionService
+        startService(Intent(this, VoiceRecognitionService::class.java))
+
+        // Set up the Composable content
         setContent {
-            // Initialize the NavController for navigation
             val navController = rememberNavController()
-            // Pass the NavController and FusedLocationProviderClient to the AppNavigation composable
-            AppNavigation(navController, fusedLocationClient)
+            AppNavigation(
+                navController = navController,
+                fusedLocationClient = fusedLocationClient,
+                triggerSOSAction = { triggerSOSAction = it } // Pass the SOS action to AppNavigation
+            )
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        unregisterReceiver(wakeWordReceiver)  // Unregister receiver to prevent memory leaks
     }
 }
 
 @Composable
-fun AppNavigation(navController: NavHostController, fusedLocationClient: FusedLocationProviderClient) {
-
-    // Retrieve the Firebase UID from the session using FirebaseAuth
+fun AppNavigation(
+    navController: NavHostController,
+    fusedLocationClient: FusedLocationProviderClient,
+    triggerSOSAction: ((() -> Unit) -> Unit)
+) {
     val firebaseUID = FirebaseAuth.getInstance().currentUser?.uid
 
-    // Navigation host to define screen routes
+    // Navigation host defining screen routes
     NavHost(navController = navController, startDestination = "home") {
-        // Home Screen
         composable("home") {
-            HomeScreen(navController, fusedLocationClient)
+            HomeScreen(
+                navController = navController,
+                fusedLocationClient = fusedLocationClient,
+                triggerSOSAction = triggerSOSAction as () -> Unit // Provide the SOS action callback
+            )
         }
-        // Emergency Contacts Screen
         composable("emergency_contacts") {
             EmergencyContactsScreen()
         }
-        // Dashboard Screen, pass the firebaseUID retrieved from the session
         composable("dashboard") {
             if (firebaseUID != null) {
                 DashboardScreen(firebaseUID = firebaseUID)
             } else {
                 // Handle case where user is not logged in
-                // You could navigate back to a login screen or show an error
             }
         }
     }

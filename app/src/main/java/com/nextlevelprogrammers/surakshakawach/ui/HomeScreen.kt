@@ -2,7 +2,7 @@ package com.nextlevelprogrammers.surakshakawach.ui
 
 import Api
 import android.Manifest
-import android.annotation.SuppressLint
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.CountDownTimer
@@ -55,14 +55,16 @@ import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.nextlevelprogrammers.surakshakawach.R
 import com.nextlevelprogrammers.surakshakawach.SOSActivity
+import com.nextlevelprogrammers.surakshakawach.VoiceRecognitionService
 import com.nextlevelprogrammers.surakshakawach.WatchActivity
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocationProviderClient) {
+fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocationProviderClient,triggerSOSAction: () -> Unit ) {
     var currentLocation by remember { mutableStateOf<LatLng?>(null) }
     var hasLocationPermission by remember { mutableStateOf(false) }
     var showModal by remember { mutableStateOf(false) }
@@ -78,6 +80,7 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
     val markerState = remember { MarkerState(position = LatLng(0.0, 0.0)) }
     var showMapTypeSelector by remember { mutableStateOf(false) }
     var mapType by remember { mutableStateOf(MapType.NORMAL) }
+//    var isMapLoaded by remember { mutableStateOf(true) } // Track map loading state
     val cameraPositionState = rememberCameraPositionState()
 
     // Firebase UID
@@ -96,9 +99,13 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
         if (isGranted) {
             fusedLocationClient.lastLocation.addOnSuccessListener { location ->
                 location?.let { currentLocation = LatLng(it.latitude, it.longitude) }
+                val intent = Intent(context, VoiceRecognitionService::class.java)
+                context.startService(intent)
+//                isMapLoaded = true // Set map as loaded once location is retrieved
             }
         } else {
             Log.e("LocationPermission", "Permission denied")
+            Log.e("VoiceRecognitionService", "RECORD_AUDIO permission denied.")
         }
     }
 
@@ -117,6 +124,21 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
         currentLocation?.let {
             markerState.position = it
             cameraPositionState.position = CameraPosition.fromLatLngZoom(it, 15f)
+        }
+    }
+
+    // Launch permission request
+    LaunchedEffect(Unit) {
+        val hasAudioPermission = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (!hasAudioPermission) {
+            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        } else {
+            // Start service directly if permission already granted
+            val intent = Intent(context, VoiceRecognitionService::class.java)
+            context.startService(intent)
         }
     }
 
@@ -252,6 +274,10 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
         }
     }
 
+    LaunchedEffect(Unit) {
+        triggerSOSAction.invoke() // Invoke SOS action callback if not null
+    }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -260,272 +286,201 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
                 onEmergencyContactsClicked = {
                     coroutineScope.launch {
                         navController.navigate("emergency_contacts")
-                        drawerState.close() // Close the drawer after navigation
+                        drawerState.close()
                     }
                 },
                 onLogoutClicked = { /* Handle Logout click */ },
                 onHelpClicked = { /* Handle Help click */ },
                 onCloseDrawer = { coroutineScope.launch { drawerState.close() } }
             )
-        },
-        gesturesEnabled = true, // Allow gestures to open/close drawer
-        scrimColor = Color.Black.copy(alpha = 0.32f) // Semi-transparent scrim color to block background
-    ){
-        Box(modifier = Modifier.fillMaxHeight().fillMaxSize().clickable(enabled = drawerState.isOpen) { // Close drawer when clicking outside
-            coroutineScope.launch { drawerState.close() }
-        }) {
-
-            Image(
-                painter = painterResource(id = R.drawable.theme),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-
-            // Background image and main content
-            Column(modifier = Modifier.fillMaxSize()) {
-
-                // Main content layout
-                Column(
+        }
+    ) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Suraksha Kawach") },
+                    actions = {
+                        IconButton(onClick = { navController.navigate("dashboard") }) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.ic_profile),
+                                contentDescription = "User Profile",
+                                tint = Color.Black
+                            )
+                        }
+                        IconButton(onClick = { coroutineScope.launch { drawerState.open() } }) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.ic_settings),
+                                contentDescription = "Settings",
+                                tint = Color.Black
+                            )
+                        }
+                    }
+                )
+            },
+            bottomBar = {
+                BottomNavBar(navController)
+            }
+        ) { paddingValues ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+            ) {
+                Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .weight(1f) // Takes up remaining space above the BottomNavBar
-                        .background(Color.Transparent)
+                        .fillMaxWidth()
                         .padding(16.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color.Gray.copy(alpha = 0.1f))
+                        .weight(1f)
                 ) {
-
-                    // Google Map with SOS button overlay
-                    Box(
-                        modifier = Modifier
-                            .weight(1.5f)
-                            .fillMaxHeight()
-                            .fillMaxWidth()
-                    ) {
-
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxHeight()
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(16.dp))
-                        ) {
-
-                            if (currentLocation != null) {
-                                GoogleMap(
-                                    modifier = Modifier.fillMaxSize(),
-                                    cameraPositionState = cameraPositionState,
-                                    uiSettings = MapUiSettings(zoomControlsEnabled = false),
-                                    properties = MapProperties(mapType = mapType)
-                                ) {
-                                    // Place marker at the user's current location
-                                    Marker(
-                                        state = markerState,
-                                        title = "You are here",
-                                        snippet = "Real-time Location"
-                                    )
-                                }
-                            } else {
-                                // Optionally show a loading indicator while waiting for location
-                                Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    CircularProgressIndicator()
-                                }
-                            }
-
-                            // Top bar with icons
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                // Profile icon aligned on the left
-                                IconButton(onClick = { navController.navigate("dashboard") }) {
-                                    Icon(
-                                        painter = painterResource(id = R.drawable.ic_profile),
-                                        contentDescription = "Profile",
-                                        tint = Color.Black,
-                                        modifier = Modifier.background(Color.White, CircleShape).size(48.dp)
-                                    )
-                                }
-
-                                // Column to stack Settings and Map Type Toggle Button, aligned on the right
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    IconButton(onClick = { coroutineScope.launch { drawerState.open() } }) {
-                                        Icon(
-                                            painter = painterResource(id = R.drawable.ic_settings),
-                                            contentDescription = "Settings",
-                                            tint = Color.Black,
-                                            modifier = Modifier.background(Color.White, CircleShape).size(48.dp)
-                                        )
-                                    }
-
-                                    // Spacer to add padding between the Settings icon and Map Type Toggle Button
-                                    Spacer(modifier = Modifier.height(8.dp)) // Adjust this height as needed
-
-                                    // Icon Button to toggle the Map Type Selector Card
-                                    IconButton(
-                                        onClick = { showMapTypeSelector = true }, // Show the card when clicked
-                                        modifier = Modifier
-                                            .background(Color.White, CircleShape)
-                                            .size(48.dp)
-                                    ) {
-                                        Icon(
-                                            painter = painterResource(id = R.drawable.map_type), // Custom icon for map type
-                                            contentDescription = "Map Type",
-                                            tint = Color.Black
-                                        )
-                                    }
-                                }
-                            }
-
-                            // Re-center Button
-                            IconButton(
-                                onClick = {
-                                    coroutineScope.launch {
-                                        currentLocation?.let { location ->
-                                            cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(location, 14f))
-                                        } ?: run {
-                                            Toast.makeText(context, "Location not available", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                },
-                                modifier = Modifier
-                                    .align(Alignment.BottomEnd)
-                                    .padding(16.dp)
-                                    .background(Color.White, CircleShape)
-                                    .size(48.dp),
-                                enabled = currentLocation != null // Disable button if location is not available
-                            ) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.my_location),
-                                    contentDescription = "My Location",
-                                    tint = Color.Black
-                                )
-                            }
-
-                            // Map Type Selector Card (shown when showMapTypeSelector is true)
-                            if (showMapTypeSelector) {
-                                Card(
-                                    modifier = Modifier
-                                        .align(Alignment.Center)
-                                        .padding(16.dp)
-                                        .background(Color.White, shape = RoundedCornerShape(12.dp)),
-                                    elevation = CardDefaults.cardElevation(8.dp)
-                                ) {
-                                    Column(
-                                        modifier = Modifier.padding(16.dp)
-                                    ) {
-                                        Text(
-                                            text = "Select Map Type",
-                                            fontSize = 18.sp,
-                                            color = Color.Black,
-                                            style = MaterialTheme.typography.titleMedium
-                                        )
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        HorizontalDivider(color = Color.Gray)
-                                        Spacer(modifier = Modifier.height(8.dp))
-
-                                        // Map type options
-                                        MapTypeOption("Normal View") {
-                                            mapType = MapType.NORMAL
-                                            showMapTypeSelector = false
-                                        }
-                                        MapTypeOption("Satellite View") {
-                                            mapType = MapType.SATELLITE
-                                            showMapTypeSelector = false
-                                        }
-                                        MapTypeOption("Terrain View") {
-                                            mapType = MapType.TERRAIN
-                                            showMapTypeSelector = false
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // SOS Button, positioned at the bottom of the map
-                        Button(
-                            onClick = {
-                                if (hasLocationPermission) {
-                                    showModal = true
-                                    startTimer()
-                                } else {
-                                    Log.e("SOS_TICKET", "Permission not granted")
-                                }
+                    if (currentLocation != null) {
+                        GoogleMap(
+                            modifier = Modifier.fillMaxSize(),
+                            cameraPositionState = rememberCameraPositionState {
+                                position = CameraPosition.fromLatLngZoom(currentLocation!!, 15f)
                             },
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .offset(y = (-20).dp)
-                                .size(150.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
-                            shape = CircleShape,
-                            elevation = ButtonDefaults.buttonElevation(
-                                defaultElevation = 8.dp, // Adjust this value for more or less elevation
-                                pressedElevation = 12.dp,
-                                disabledElevation = 0.dp
-                            ),
-                            enabled = drawerState.isClosed
+                            uiSettings = MapUiSettings(zoomControlsEnabled = false),
+                            properties = MapProperties(mapType = mapType)
                         ) {
-                            Text(text = "SOS", color = Color.White, fontSize = 40.sp)
+                            Marker(
+                                state = markerState,
+                                title = "You are here",
+                                snippet = "Real-time Location"
+                            )
                         }
-
+                    } else {
+                        ShimmerEffect()
                     }
 
-                    if (showModal && !isRequestSent && isProcessCompleted) {
-                        AlertDialog(
-                            onDismissRequest = {},
-                            title = { Text("Send SOS?") },
-                            text = {
-                                Column {
-                                    Text("SOS will be sent in $countdown seconds.")
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text("Do you want to cancel or confirm?")
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        IconButton(
+                            onClick = { showMapTypeSelector = true },
+                            modifier = Modifier
+                                .background(Color.White, CircleShape)
+                                .size(48.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.map_type),
+                                contentDescription = "Map Type",
+                                tint = Color.Black
+                            )
+                        }
+                    }
 
-                                    if (isLoading) {
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        CircularProgressIndicator() // Show loading indicator when waiting for response
-                                    }
-                                }
-                            },
-                            confirmButton = {
-                                Button(
-                                    onClick = {
-                                        isLoading = true
-                                        isProcessCompleted = false // Start SOS process
-                                        sendSOSManually() // Trigger SOS request
-                                    },
-                                    enabled = !isLoading
-                                ) {
-                                    Text("Confirm")
-                                }
-                            },
-                            dismissButton = {
-                                Button(
-                                    onClick = {
-                                        isSOSCanceled = true
-                                        showModal = false
-                                        countdownTimer?.cancel()
-                                        isRequestSent = false
-                                        isLoading = false
-                                        isProcessCompleted = true // Reset process completion on cancel
-                                    },
-                                    enabled = !isLoading
-                                ) {
-                                    Text("Cancel")
-                                }
+                    if (showMapTypeSelector) {
+                        Card(
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .padding(16.dp)
+                                .background(Color.White, shape = RoundedCornerShape(12.dp)),
+                            elevation = CardDefaults.cardElevation(8.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp)
+                            ) {
+                                Text(
+                                    text = "Select Map Type",
+                                    fontSize = 18.sp,
+                                    color = Color.Black,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                HorizontalDivider(color = Color.Gray)
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                MapTypeOption("Normal View") { mapType = MapType.NORMAL; showMapTypeSelector = false }
+                                MapTypeOption("Satellite View") { mapType = MapType.SATELLITE; showMapTypeSelector = false }
+                                MapTypeOption("Terrain View") { mapType = MapType.TERRAIN; showMapTypeSelector = false }
+                                MapTypeOption("Hybrid View") { mapType = MapType.HYBRID; showMapTypeSelector = false }
                             }
-                        )
+                        }
                     }
                 }
 
-                // Bottom Navigation Bar
-                BottomNavBar(navController)
+                Button(
+                    onClick = {
+                        if (hasLocationPermission) {
+                            showModal = true
+                            startTimer()
+                        }
+                    },
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .padding(vertical = 24.dp)
+                        .size(150.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
+                    shape = CircleShape
+                ) {
+                    Text(text = "SOS", color = Color.White, fontSize = 40.sp)
+                }
+
+                if (showModal && !isRequestSent && isProcessCompleted) {
+                    SOSConfirmationDialog(
+                        countdown = countdown,
+                        isLoading = isLoading,
+                        onConfirm = {
+                            isLoading = true
+                            isProcessCompleted = false
+                            sendSOSManually() // Trigger SOS request
+                        },
+                        onDismiss = {
+                            showModal = false
+                            isLoading = false
+                            isProcessCompleted = true
+                            countdownTimer?.cancel()
+                            isRequestSent = false
+                        }
+                    )
+                }
             }
         }
     }
+}
+
+@Composable
+fun SOSConfirmationDialog(
+    countdown: Int,
+    isLoading: Boolean,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Send SOS?") },
+        text = {
+            Column {
+                Text("SOS will be sent in $countdown seconds.")
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Do you want to cancel or confirm?")
+                if (isLoading) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    CircularProgressIndicator()
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                enabled = !isLoading
+            ) {
+                Text("Confirm")
+            }
+        },
+        dismissButton = {
+            Button(
+                onClick = onDismiss,
+                enabled = !isLoading
+            ) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @Composable
@@ -613,7 +568,7 @@ fun DrawerItem(text: String, onClick: () -> Unit) {
 
 @Composable
 fun DividerItem(modifier: Modifier = Modifier) {
-    Divider(
+    HorizontalDivider(
         modifier = modifier.padding(vertical = 8.dp),
         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
     )
@@ -622,6 +577,16 @@ fun DividerItem(modifier: Modifier = Modifier) {
 @Composable
 fun BottomNavBar(navController: NavHostController) {
     val context = LocalContext.current
+    val audioPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            startVoiceRecognitionService(context)
+        } else {
+            Log.e("HomeScreen", "Microphone permission denied.")
+            Toast.makeText(context, "Microphone permission is required for voice recognition.", Toast.LENGTH_LONG).show()
+        }
+    }
     NavigationBar {
         NavigationBarItem(
             selected = true,
@@ -634,12 +599,22 @@ fun BottomNavBar(navController: NavHostController) {
         NavigationBarItem(
             selected = false,
             onClick = {
-                Toast.makeText(context, "Ongoing Work", Toast.LENGTH_SHORT).show()
+                val hasAudioPermission = ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.RECORD_AUDIO
+                ) == PackageManager.PERMISSION_GRANTED
+
+                if (hasAudioPermission) {
+                    startVoiceRecognitionService(context)
+                } else {
+                    audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                }
             },
-            icon = { Icon(
-                painter = painterResource(id = R.drawable.search), // Use your custom drawable resource
-                contentDescription = "Home"
-            ) }
+            icon = {
+                Icon(
+                    painter = painterResource(id = R.drawable.search),
+                    contentDescription = "Start Voice Recognition"
+                )
+            }
         )
         NavigationBarItem(
             selected = false,
@@ -693,24 +668,21 @@ fun MapTypeOption(name: String, onClick: () -> Unit) {
     }
 }
 
-@SuppressLint("MissingPermission")
-fun startLocationUpdates(
-    fusedLocationClient: FusedLocationProviderClient,
-    onLocationUpdate: (location: android.location.Location) -> Unit
-) {
-    val locationRequest = LocationRequest.create().apply {
-        interval = 5000
-        fastestInterval = 2000
-        priority = LocationRequest.PRIORITY_HIGH_ACCURACY
+@Composable
+fun ShimmerEffect() {
+    // Shimmer or skeleton effect for loading state
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.LightGray.copy(alpha = 0.3f))
+            .padding(16.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        CircularProgressIndicator(color = Color.Gray)
     }
-
-    val locationCallback = object : LocationCallback() {
-        override fun onLocationResult(locationResult: LocationResult) {
-            locationResult.locations.forEach { location ->
-                onLocationUpdate(location)
-            }
-        }
-    }
-
-    fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
+}
+fun startVoiceRecognitionService(context: Context) {
+    val intent = Intent(context, VoiceRecognitionService::class.java)
+    context.startService(intent)
+    Log.d("HomeScreen", "VoiceRecognitionService started for testing.")
 }

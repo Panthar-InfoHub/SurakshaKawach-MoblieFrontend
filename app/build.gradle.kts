@@ -109,4 +109,6 @@ dependencies {
     implementation (libs.integrity)
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation ("androidx.compose.material3:material3:1.3.1")
+    implementation ("ai.picovoice:porcupine-android:3.0.1")
+    implementation ("ai.picovoice:rhino-android:3.0.1")
 }
