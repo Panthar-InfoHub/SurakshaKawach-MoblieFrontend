@@ -3,6 +3,7 @@ package com.nextlevelprogrammers.surakshakawach
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -13,7 +14,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.lifecycleScope
 import com.nextlevelprogrammers.surakshakawach.ui.theme.SurakshaKawachTheme
 import kotlinx.coroutines.launch
 
@@ -69,29 +69,40 @@ class PermissionActivity : ComponentActivity() {
         }
     }
 
-    // Check device permissions
+    // Check if all required device permissions are granted
     private fun checkDevicePermissions(): Boolean {
         val locationPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
         val contactPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS)
         val cameraPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
         val audioPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+        val notificationPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            PackageManager.PERMISSION_GRANTED // Not needed below Android 13
+        }
 
         return locationPermission == PackageManager.PERMISSION_GRANTED &&
                 contactPermission == PackageManager.PERMISSION_GRANTED &&
                 cameraPermission == PackageManager.PERMISSION_GRANTED &&
-                audioPermission == PackageManager.PERMISSION_GRANTED
+                audioPermission == PackageManager.PERMISSION_GRANTED &&
+                notificationPermission == PackageManager.PERMISSION_GRANTED
     }
 
-    // Request device permissions
+    // Request all necessary permissions, including POST_NOTIFICATIONS for Android 13+
     private fun requestAllPermissions() {
-        permissionLauncher.launch(
-            arrayOf(
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.READ_CONTACTS,
-                Manifest.permission.CAMERA,
-                Manifest.permission.RECORD_AUDIO
-            )
+        val permissions = mutableListOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.READ_CONTACTS,
+            Manifest.permission.CAMERA,
+            Manifest.permission.RECORD_AUDIO
         )
+
+        // Add POST_NOTIFICATIONS permission if on Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+
+        permissionLauncher.launch(permissions.toTypedArray())
     }
 
     private fun navigateToHome() {
@@ -108,7 +119,7 @@ class PermissionActivity : ComponentActivity() {
                 Text(text = "Permissions Required")
             },
             text = {
-                Text("We need access to location, contacts, camera, and audio to provide the best experience.")
+                Text("We need access to location, contacts, camera, audio, and notifications to provide the best experience.")
             },
             confirmButton = {
                 Button(onClick = onAllow) {
