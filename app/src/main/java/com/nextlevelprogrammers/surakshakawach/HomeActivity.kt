@@ -7,9 +7,9 @@ import android.content.IntentFilter
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.annotation.RequiresApi
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
@@ -22,54 +22,41 @@ import com.google.firebase.auth.FirebaseAuth
 import com.nextlevelprogrammers.surakshakawach.ui.DashboardScreen
 import com.nextlevelprogrammers.surakshakawach.ui.EmergencyContactsScreen
 import com.nextlevelprogrammers.surakshakawach.ui.HomeScreen
+import com.nextlevelprogrammers.surakshakawach.viewmodel.HomeViewModel
 
 class HomeActivity : ComponentActivity() {
 
-    // Declare FusedLocationProviderClient
     private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private val homeViewModel: HomeViewModel by viewModels()
 
-    // Callback to trigger SOS action in HomeScreen
-    private var triggerSOSAction: (() -> Unit)? = null
-
-    // Broadcast receiver for wake word detection
+    // Define the BroadcastReceiver
     private val wakeWordReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == "com.nextlevelprogrammers.surakshakawach.WAKE_WORD_DETECTED") {
-                Log.d("HomeActivity", "Wake word detected! Triggering SOS action.")
-                Toast.makeText(context, "Wake word detected!", Toast.LENGTH_SHORT).show()
-                triggerSOSAction?.invoke() // Trigger SOS action if available
-            }
+            homeViewModel.activateSOS()
         }
     }
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // Initialize the FusedLocationProviderClient
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
 
-        // Register the broadcast receiver
-        val filter = IntentFilter("com.nextlevelprogrammers.surakshakawach.WAKE_WORD_DETECTED")
-        registerReceiver(wakeWordReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        // Register receiver with condition to support different API levels
+        val intentFilter = IntentFilter("com.nextlevelprogrammers.surakshakawach.WAKE_WORD_DETECTED")
+        registerReceiver(wakeWordReceiver, intentFilter, Context.RECEIVER_NOT_EXPORTED)
 
-        // Start the VoiceRecognitionService
+        // Start voice recognition service
         startService(Intent(this, VoiceRecognitionService::class.java))
 
-        // Set up the Composable content
         setContent {
             val navController = rememberNavController()
-            AppNavigation(
-                navController = navController,
-                fusedLocationClient = fusedLocationClient,
-                triggerSOSAction = { triggerSOSAction = it } // Pass the SOS action to AppNavigation
-            )
+            AppNavigation(navController, fusedLocationClient, homeViewModel)
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        unregisterReceiver(wakeWordReceiver)  // Unregister receiver to prevent memory leaks
+        unregisterReceiver(wakeWordReceiver)
     }
 }
 
@@ -77,17 +64,17 @@ class HomeActivity : ComponentActivity() {
 fun AppNavigation(
     navController: NavHostController,
     fusedLocationClient: FusedLocationProviderClient,
-    triggerSOSAction: ((() -> Unit) -> Unit)
+    homeViewModel: HomeViewModel
 ) {
     val firebaseUID = FirebaseAuth.getInstance().currentUser?.uid
 
-    // Navigation host defining screen routes
+    // Define the navigation routes
     NavHost(navController = navController, startDestination = "home") {
         composable("home") {
             HomeScreen(
                 navController = navController,
                 fusedLocationClient = fusedLocationClient,
-                triggerSOSAction = triggerSOSAction as () -> Unit // Provide the SOS action callback
+                homeViewModel = homeViewModel // Pass ViewModel to HomeScreen
             )
         }
         composable("emergency_contacts") {
@@ -96,8 +83,6 @@ fun AppNavigation(
         composable("dashboard") {
             if (firebaseUID != null) {
                 DashboardScreen(firebaseUID = firebaseUID)
-            } else {
-                // Handle case where user is not logged in
             }
         }
     }

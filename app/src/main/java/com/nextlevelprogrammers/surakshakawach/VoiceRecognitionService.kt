@@ -2,19 +2,16 @@ package com.nextlevelprogrammers.surakshakawach
 
 import ai.picovoice.porcupine.PorcupineManager
 import ai.picovoice.porcupine.PorcupineManagerCallback
-import android.Manifest
+import android.app.ActivityManager
 import android.app.AlarmManager
-import android.app.PendingIntent
-import android.app.Service
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.media.AudioFormat
 import android.media.AudioRecord
-import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
@@ -22,10 +19,8 @@ import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import androidx.core.content.ContextCompat
 
 class VoiceRecognitionService : Service() {
-
     private var porcupineManager: PorcupineManager? = null
     private var audioRecorder: AudioRecord? = null
     private var isListening = false
@@ -33,65 +28,55 @@ class VoiceRecognitionService : Service() {
 
     private val porcupineCallback = PorcupineManagerCallback { keywordIndex ->
         Log.d("VoiceRecognitionService", "Wake word detected! Performing action.")
+        openHomeActivityIfNotOpen()
         sendWakeWordDetectedBroadcast()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d("VoiceRecognitionService", "onStartCommand: Starting foreground service for wake word detection.")
-
-        // Start as a foreground service
         startForeground(1, createForegroundNotification())
-
-        if (checkRecordAudioPermission()) {
-            startWakeWordDetection()
-        } else {
-            Log.e("VoiceRecognitionService", "onStartCommand: Microphone permission is not granted.")
-        }
+        // Initialize wake word detection
+        startWakeWordDetection()
         return START_STICKY
     }
 
     private fun startWakeWordDetection() {
-        Log.d("VoiceRecognitionService", "startWakeWordDetection: Initializing wake word detection...")
+        porcupineManager = PorcupineManager.Builder()
+            .setAccessKey("VyTqW8d9vYCOqdxvNnuH7skFy+b6IBy5NGk2oMWCd48f/KMUCMQmJg==")
+            .setKeywordPath("help_us.ppn")
+            .setSensitivity(1f)
+            .build(applicationContext, porcupineCallback)
+        porcupineManager?.start()
+    }
 
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-            try {
-                Log.d("VoiceRecognitionService", "startWakeWordDetection: Setting up PorcupineManager...")
 
-                porcupineManager = PorcupineManager.Builder()
-                    .setAccessKey("VyTqW8d9vYCOqdxvNnuH7skFy+b6IBy5NGk2oMWCd48f/KMUCMQmJg==")
-                    .setKeywordPath("help_us.ppn") // Ensure help_us.ppn is in assets
-                    .setSensitivity(0.5f) // Adjust sensitivity between 0 to 1
-                    .build(applicationContext, porcupineCallback)
-
-                val bufferSize = AudioRecord.getMinBufferSize(
-                    sampleRate,
-                    AudioFormat.CHANNEL_IN_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT
-                )
-
-                audioRecorder = AudioRecord(
-                    MediaRecorder.AudioSource.MIC,
-                    sampleRate,
-                    AudioFormat.CHANNEL_IN_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT,
-                    bufferSize
-                )
-
-                if (audioRecorder?.state == AudioRecord.STATE_INITIALIZED) {
-                    Log.d("VoiceRecognitionService", "startWakeWordDetection: AudioRecord successfully initialized with buffer size: $bufferSize")
-                    audioRecorder?.startRecording()
-                    isListening = true
-                    porcupineManager?.start()
-                    Log.d("VoiceRecognitionService", "startWakeWordDetection: PorcupineManager started successfully.")
-                } else {
-                    Log.e("VoiceRecognitionService", "startWakeWordDetection: Failed to initialize AudioRecord.")
-                }
-            } catch (e: Exception) {
-                Log.e("VoiceRecognitionService", "startWakeWordDetection: Error initializing Porcupine - ${e.message}", e)
+    private fun openHomeActivityIfNotOpen() {
+        if (!isHomeActivityRunning()) {
+            val launchIntent = Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             }
+            startActivity(launchIntent)
+            Log.d("VoiceRecognitionService", "HomeActivity launched as it was not open.")
         } else {
-            Log.e("VoiceRecognitionService", "startWakeWordDetection: RECORD_AUDIO permission is not granted.")
+            Log.d("VoiceRecognitionService", "HomeActivity is already open; no action needed.")
         }
+    }
+
+    private fun isHomeActivityRunning(): Boolean {
+        val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val runningTasks = activityManager.getRunningTasks(Int.MAX_VALUE)
+
+        for (task in runningTasks) {
+            if (task.topActivity?.className == MainActivity::class.java.name) {
+                return true
+            }
+        }
+        return false
+    }
+
+
+    private fun sendWakeWordDetectedBroadcast() {
+        val intent = Intent("com.nextlevelprogrammers.surakshakawach.WAKE_WORD_DETECTED")
+        sendBroadcast(intent)
     }
 
     private fun createForegroundNotification(): Notification {
@@ -117,19 +102,6 @@ class VoiceRecognitionService : Service() {
             .setSmallIcon(R.mipmap.icon) // Replace with your app icon
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .build()
-    }
-
-    private fun checkRecordAudioPermission(): Boolean {
-        val permissionGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-        Log.d("VoiceRecognitionService", "checkRecordAudioPermission: RECORD_AUDIO permission granted: $permissionGranted")
-        return permissionGranted
-    }
-
-    private fun sendWakeWordDetectedBroadcast() {
-        Log.d("VoiceRecognitionService", "sendWakeWordDetectedBroadcast: Broadcasting wake word detection intent.")
-        val intent = Intent("com.nextlevelprogrammers.surakshakawach.WAKE_WORD_DETECTED")
-        sendBroadcast(intent)
-        Log.d("VoiceRecognitionService", "sendWakeWordDetectedBroadcast: Broadcast sent successfully.")
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
