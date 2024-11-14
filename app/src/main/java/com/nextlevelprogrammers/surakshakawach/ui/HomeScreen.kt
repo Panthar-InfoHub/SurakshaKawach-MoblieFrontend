@@ -11,7 +11,6 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -21,6 +20,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -31,18 +31,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
-import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.firebase.auth.FirebaseAuth
@@ -57,6 +56,7 @@ import com.nextlevelprogrammers.surakshakawach.R
 import com.nextlevelprogrammers.surakshakawach.SOSActivity
 import com.nextlevelprogrammers.surakshakawach.VoiceRecognitionService
 import com.nextlevelprogrammers.surakshakawach.WatchActivity
+import com.nextlevelprogrammers.surakshakawach.viewmodel.HomeViewModel
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -64,7 +64,7 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocationProviderClient,triggerSOSAction: () -> Unit ) {
+fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocationProviderClient,homeViewModel: HomeViewModel = viewModel() ) {
     var currentLocation by remember { mutableStateOf<LatLng?>(null) }
     var hasLocationPermission by remember { mutableStateOf(false) }
     var showModal by remember { mutableStateOf(false) }
@@ -76,6 +76,7 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
     var isProcessCompleted by remember { mutableStateOf(true) }
     var isRequestSent by remember { mutableStateOf(false) }
     var isSOSButtonEnabled by remember { mutableStateOf(true) }
+    val triggerSOS by homeViewModel.triggerSOS.collectAsState()
 
     val markerState = remember { MarkerState(position = LatLng(0.0, 0.0)) }
     var showMapTypeSelector by remember { mutableStateOf(false) }
@@ -166,6 +167,8 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
         }
     }
 
+
+
     // Function to handle SOS ticket creation
     suspend fun handleSOSTicket(firebaseUID: String?) {
         Log.d("SOS_TICKET", "Entered handleSOSTicket function.")
@@ -239,6 +242,18 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
         }.start()
         Log.d("SOS_TIMER", "Timer started.")
     }
+
+    LaunchedEffect(triggerSOS) {
+        if (triggerSOS) {
+            if (currentLocation != null) {
+                homeViewModel.resetSOS()
+                startTimer()
+            } else {
+                Log.e("SOS", "Location not available.")
+            }
+        }
+    }
+
     // Unified function to handle SOS sending
     fun sendSOS() {
         coroutineScope.launch {
@@ -269,13 +284,13 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
     fun sendSOSManually() {
         if (!isRequestSent) {
             isRequestSent = true
-            countdownTimer?.cancel()
-            sendSOS()
+            coroutineScope.launch {
+                val intent = Intent(context, SOSActivity::class.java)
+                context.startActivity(intent)
+                sendSOS()
+                isRequestSent = false // Reset after sending SOS
+            }
         }
-    }
-
-    LaunchedEffect(Unit) {
-        triggerSOSAction.invoke() // Invoke SOS action callback if not null
     }
 
     ModalNavigationDrawer(
@@ -428,6 +443,7 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
                             isLoading = true
                             isProcessCompleted = false
                             sendSOSManually() // Trigger SOS request
+                            sendSOS()
                         },
                         onDismiss = {
                             showModal = false

@@ -116,7 +116,12 @@
             android:name="androidx.camera.default.impl"
             android:value="androidx.camera.camera2.Camera2Config" />
 
-
+        <receiver android:name=".WakeWordReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.nextlevelprogrammers.surakshakawach.WAKE_WORD_DETECTED"/>
+            </intent-filter>
+        </receiver>
         <service
             android:name=".VoiceRecognitionService"
             android:exported="true"

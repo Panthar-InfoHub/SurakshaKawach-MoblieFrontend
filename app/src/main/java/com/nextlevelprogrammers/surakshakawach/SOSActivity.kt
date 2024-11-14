@@ -78,7 +78,6 @@ class SOSActivity : ComponentActivity() {
     private var mediaRecorder: MediaRecorder? = null
     private lateinit var locationCallback: LocationCallback
     private val imageUrls = mutableListOf<String>()
-    private var isCameraExecutorInitialized = false
     private var lastCaptureTimestamp = 0L // Store the last capture timestamp
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -105,7 +104,6 @@ class SOSActivity : ComponentActivity() {
 
         // Initialize the camera executor
         cameraExecutor = Executors.newSingleThreadExecutor()
-        isCameraExecutorInitialized = true
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
 
         checkMultiplePermissionsAndStartUpdates()
@@ -583,7 +581,7 @@ class SOSActivity : ComponentActivity() {
         stopUpdatingCoordinates()
 
         // Shutdown camera executor
-        if (isCameraExecutorInitialized) {
+        if (::cameraExecutor.isInitialized) {
             cameraExecutor.shutdown()
             Log.d("SOSActivity", "Camera executor shutdown successfully.")
         } else {
