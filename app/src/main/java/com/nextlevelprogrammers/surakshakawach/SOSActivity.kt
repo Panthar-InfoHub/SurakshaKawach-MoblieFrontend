@@ -573,6 +573,10 @@ class SOSActivity : ComponentActivity() {
 
 
     override fun onDestroy() {
+        val sharedDir = File(applicationContext.filesDir, "shared")
+        if (sharedDir.exists()) {
+            sharedDir.deleteRecursively()
+        }
         super.onDestroy()
 
         // Stop all background tasks

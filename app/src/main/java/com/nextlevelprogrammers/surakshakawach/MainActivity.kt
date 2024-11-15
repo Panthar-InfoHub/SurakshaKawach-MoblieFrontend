@@ -1,36 +1,53 @@
 package com.nextlevelprogrammers.surakshakawach
 
+import android.content.Intent
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
-import androidx.compose.ui.Modifier
-import com.google.firebase.FirebaseApp
-import com.nextlevelprogrammers.surakshakawach.ui.IntroductionScreen
-import com.nextlevelprogrammers.surakshakawach.ui.theme.SurakshaKawachTheme
+import com.google.firebase.auth.FirebaseAuth
+import com.nextlevelprogrammers.surakshakawach.ui.LoginScreen
+import com.nextlevelprogrammers.surakshakawach.api.UserPreferences
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Initialize Firebase
-        FirebaseApp.initializeApp(this)
-        Log.d("Firebase", "FirebaseApp initialized: ${FirebaseApp.getInstance().name}")
+        // Initialize Firebase Authentication
+        val auth = FirebaseAuth.getInstance()
+        val currentUser = auth.currentUser
+        val isUserCreated = UserPreferences.isUserCreated(this)
 
-        // Enable Edge-to-Edge UI
-        enableEdgeToEdge()
+        // Determine the target activity
+        if (currentUser != null) {
+            // Revalidate Firebase authentication token
+            currentUser.getIdToken(true).addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    val idToken = task.result?.token
 
-        // Set the content using Jetpack Compose
-        setContent {
-            SurakshaKawachTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    IntroductionScreen(modifier = Modifier.padding(innerPadding))
+                    if (idToken != null && isUserCreated) {
+                        // User is authenticated and session exists
+                        navigateToActivity(HomeActivity::class.java)
+                    } else {
+                        // User authenticated but session not created
+                        navigateToActivity(IntroductionActivity::class.java)
+                    }
+                } else {
+                    // Token validation failed, force login
+                    auth.signOut()
+                    navigateToActivity(LoginScreen::class.java)
                 }
             }
+        } else {
+            // User is not authenticated, navigate to login
+            navigateToActivity(LoginScreen::class.java)
         }
+    }
+
+    // Function to navigate to the specified activity
+    private fun navigateToActivity(activityClass: Class<*>) {
+        val intent = Intent(this, activityClass).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        startActivity(intent)
+        finish()
     }
 }
