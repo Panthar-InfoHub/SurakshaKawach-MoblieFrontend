@@ -19,6 +19,7 @@ import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import java.io.File
 
 class VoiceRecognitionService : Service() {
     private var porcupineManager: PorcupineManager? = null
@@ -51,8 +52,8 @@ class VoiceRecognitionService : Service() {
 
     private fun openHomeActivityIfNotOpen() {
         if (!isHomeActivityRunning()) {
-            val launchIntent = Intent(this, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            val launchIntent = Intent(this, HomeActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             }
             startActivity(launchIntent)
             Log.d("VoiceRecognitionService", "HomeActivity launched as it was not open.")
@@ -60,17 +61,10 @@ class VoiceRecognitionService : Service() {
             Log.d("VoiceRecognitionService", "HomeActivity is already open; no action needed.")
         }
     }
-
     private fun isHomeActivityRunning(): Boolean {
         val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        val runningTasks = activityManager.getRunningTasks(Int.MAX_VALUE)
-
-        for (task in runningTasks) {
-            if (task.topActivity?.className == MainActivity::class.java.name) {
-                return true
-            }
-        }
-        return false
+        val runningTasks = activityManager.appTasks
+        return runningTasks.any { it.taskInfo.topActivity?.className == HomeActivity::class.java.name }
     }
 
 
@@ -148,6 +142,10 @@ class VoiceRecognitionService : Service() {
     override fun onDestroy() {
         Log.d("VoiceRecognitionService", "onDestroy: Stopping PorcupineManager and releasing AudioRecord.")
 
+        val sharedDir = File(applicationContext.filesDir, "shared")
+        if (sharedDir.exists()) {
+            sharedDir.deleteRecursively()
+        }
         porcupineManager?.stop()
         porcupineManager?.delete()
 

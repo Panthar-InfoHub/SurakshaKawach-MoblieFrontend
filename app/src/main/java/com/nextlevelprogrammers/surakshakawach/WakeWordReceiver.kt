@@ -11,7 +11,7 @@ class WakeWordReceiver : BroadcastReceiver() {
         Log.d("WakeWordReceiver", "Wake word detected! Checking if HomeActivity is running.")
 
         if (!isHomeActivityRunning(context)) {
-            val launchIntent = Intent(context, MainActivity::class.java).apply {
+            val launchIntent = Intent(context, HomeActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             }
             context.startActivity(launchIntent)

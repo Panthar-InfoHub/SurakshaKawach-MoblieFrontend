@@ -3,15 +3,17 @@ package com.nextlevelprogrammers.surakshakawach
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Text
+import androidx.appcompat.app.AlertDialog
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.core.content.ContextCompat
 import com.nextlevelprogrammers.surakshakawach.ui.theme.SurakshaKawachTheme
@@ -26,7 +28,12 @@ class PermissionActivity : ComponentActivity() {
             if (allPermissionsGranted) {
                 navigateToHome()
             } else {
-                Toast.makeText(this, "All permissions are required.", Toast.LENGTH_LONG).show()
+                val permanentlyDenied = permissions.any { !shouldShowRequestPermissionRationale(it.key) && !it.value }
+                if (permanentlyDenied) {
+                    showSettingsDialog()
+                } else {
+                    Toast.makeText(this, "All permissions are required.", Toast.LENGTH_LONG).show()
+                }
             }
         }
 
@@ -71,25 +78,19 @@ class PermissionActivity : ComponentActivity() {
 
     // Check if all required device permissions are granted
     private fun checkDevicePermissions(): Boolean {
-        val locationPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-        val contactPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS)
-        val cameraPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
-        val audioPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-        val notificationPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-        } else {
-            PackageManager.PERMISSION_GRANTED // Not needed below Android 13
+        val permissionsToCheck = getRequiredPermissions()
+        return permissionsToCheck.all { permission ->
+            ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
         }
-
-        return locationPermission == PackageManager.PERMISSION_GRANTED &&
-                contactPermission == PackageManager.PERMISSION_GRANTED &&
-                cameraPermission == PackageManager.PERMISSION_GRANTED &&
-                audioPermission == PackageManager.PERMISSION_GRANTED &&
-                notificationPermission == PackageManager.PERMISSION_GRANTED
     }
 
     // Request all necessary permissions, including POST_NOTIFICATIONS for Android 13+
     private fun requestAllPermissions() {
+        val permissions = getRequiredPermissions()
+        permissionLauncher.launch(permissions.toTypedArray())
+    }
+
+    private fun getRequiredPermissions(): List<String> {
         val permissions = mutableListOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.READ_CONTACTS,
@@ -102,13 +103,32 @@ class PermissionActivity : ComponentActivity() {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
         }
 
-        permissionLauncher.launch(permissions.toTypedArray())
+        // Add WRITE_EXTERNAL_STORAGE for Android versions <= 32
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {
+            permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        }
+
+        return permissions
     }
 
     private fun navigateToHome() {
         val intent = Intent(this, HomeActivity::class.java)
         startActivity(intent)
         finish()
+    }
+
+    private fun showSettingsDialog() {
+        val builder = AlertDialog.Builder(this)
+        builder.setTitle("Permissions Required")
+            .setMessage("Some permissions are permanently denied. Please enable them in the app settings for full functionality.")
+            .setPositiveButton("Go to Settings") { _, _ ->
+                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.fromParts("package", packageName, null)
+                }
+                startActivity(intent)
+            }
+            .setNegativeButton("Cancel") { dialog, _ -> dialog.dismiss() }
+        builder.show()
     }
 
     @Composable
@@ -119,7 +139,19 @@ class PermissionActivity : ComponentActivity() {
                 Text(text = "Permissions Required")
             },
             text = {
-                Text("We need access to location, contacts, camera, audio, and notifications to provide the best experience.")
+                Column {
+                    Text("We need access to the following:")
+                    Text("- Location: For tracking your position.")
+                    Text("- Contacts: To manage emergency contacts.")
+                    Text("- Camera: For capturing images.")
+                    Text("- Microphone: For wake word detection.")
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        Text("- Notifications: For alerting you about critical events.")
+                    }
+                    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {
+                        Text("- Storage: To save critical files.")
+                    }
+                }
             },
             confirmButton = {
                 Button(onClick = onAllow) {
