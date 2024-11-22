@@ -2,6 +2,8 @@ package com.nextlevelprogrammers.surakshakawach.ui
 
 import Api
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.animation.core.animateDpAsState
@@ -30,13 +32,21 @@ import kotlinx.coroutines.launch
 import androidx.compose.material3.pulltorefresh.PullToRefreshState
 import androidx.compose.material3.pulltorefresh.pullToRefresh
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import com.nextlevelprogrammers.surakshakawach.data.ContactDatabase
+import com.nextlevelprogrammers.surakshakawach.utils.UserSessionManager
+import com.nextlevelprogrammers.surakshakawach.utils.toApiModel
+import com.nextlevelprogrammers.surakshakawach.utils.toEntity
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EmergencyContactsScreen() {
     val context = LocalContext.current
     val firebaseUID = FirebaseAuth.getInstance().currentUser?.uid
+        ?: UserSessionManager.getSession(context)["userId"]
+
 
     if (firebaseUID == null) {
         Toast.makeText(context, "User not logged in", Toast.LENGTH_SHORT).show()
@@ -94,34 +104,55 @@ fun EmergencyContactsScreen() {
                         ContactCard(
                             contact,
                             onUpdate = { updatedContact ->
-                                emergencyContacts = emergencyContacts.map {
-                                    if (it == contact) updatedContact else it
-                                }
                                 coroutineScope.launch {
-                                    val isSuccess = Api().updateEmergencyContacts(
-                                        firebaseUID = firebaseUID,
-                                        oldContacts = listOf(contact),
-                                        newContacts = listOf(updatedContact)
-                                    )
-                                    if (isSuccess) {
+                                    try {
+                                        // Update local database
+                                        val updatedContactEntity = updatedContact.toEntity()
+                                        val database = ContactDatabase.getInstance(context)
+                                        database.contactDao().updateContact(updatedContactEntity)
+
+                                        // Attempt to sync with the server
+                                        if (isNetworkAvailable(context)) {
+                                            val isSuccess = Api().updateEmergencyContacts(
+                                                firebaseUID = firebaseUID,
+                                                oldContacts = listOf(contact),
+                                                newContacts = listOf(updatedContact)
+                                            )
+                                            if (!isSuccess) {
+                                                Toast.makeText(context, "Failed to sync with server. Changes saved locally.", Toast.LENGTH_SHORT).show()
+                                            }
+                                        } else {
+                                            Toast.makeText(context, "Offline: Changes saved locally.", Toast.LENGTH_SHORT).show()
+                                        }
                                         onRefresh()
-                                        Toast.makeText(context, "Contact updated successfully", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        Toast.makeText(context, "Failed to update contact", Toast.LENGTH_SHORT).show()
+                                    } catch (e: Exception) {
+                                        Log.e("UpdateError", "Error updating contact: ${e.localizedMessage}")
                                     }
                                 }
                             },
                             onDelete = { contactToDelete ->
                                 coroutineScope.launch {
-                                    val isSuccess = Api().removeEmergencyContacts(
-                                        firebaseUID = firebaseUID,
-                                        contactDetails = listOf(contactToDelete)
-                                    )
-                                    if (isSuccess) {
+                                    try {
+                                        // Remove from local database
+                                        val database = ContactDatabase.getInstance(context)
+                                        val contactEntity = contactToDelete.toEntity()
+                                        database.contactDao().deleteContact(contactEntity)
+
+                                        // Attempt to sync with the server
+                                        if (isNetworkAvailable(context)) {
+                                            val isSuccess = Api().removeEmergencyContacts(
+                                                firebaseUID = firebaseUID,
+                                                contactDetails = listOf(contactToDelete)
+                                            )
+                                            if (!isSuccess) {
+                                                Toast.makeText(context, "Failed to sync with server. Contact removed locally.", Toast.LENGTH_SHORT).show()
+                                            }
+                                        } else {
+                                            Toast.makeText(context, "Offline: Contact removed locally.", Toast.LENGTH_SHORT).show()
+                                        }
                                         onRefresh()
-                                        Toast.makeText(context, "${contactToDelete.name} deleted successfully", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        Toast.makeText(context, "Failed to delete ${contactToDelete.name}", Toast.LENGTH_SHORT).show()
+                                    } catch (e: Exception) {
+                                        Log.e("DeleteError", "Error deleting contact: ${e.localizedMessage}")
                                     }
                                 }
                             }
@@ -159,8 +190,9 @@ fun EmergencyContactsScreen() {
                 confirmButton = {
                     Button(
                         onClick = {
+                            // Check for duplicate contact
                             val isDuplicate = emergencyContacts.any {
-                                it.email == email || it.mobile == mobile
+                                it.email.equals(email, ignoreCase = true) || it.mobile == mobile
                             }
 
                             if (isDuplicate) {
@@ -172,15 +204,24 @@ fun EmergencyContactsScreen() {
                                 return@Button
                             }
 
+                            // Proceed to add contact
                             coroutineScope.launch {
                                 try {
-                                    val isSuccess = Api().sendEmergencyContactToServer(
+                                    // Save contact to the server
+                                    val newContact = EmergencyContact(name, email, mobile)
+                                    val isServerSuccess = Api().sendEmergencyContactToServer(
                                         firebaseUID,
-                                        name,
-                                        email,
-                                        mobile
+                                        newContact.name,
+                                        newContact.email,
+                                        newContact.mobile
                                     )
-                                    if (isSuccess) {
+
+                                    if (isServerSuccess) {
+                                        // Save contact to local Room database
+                                        val database = ContactDatabase.getInstance(context)
+                                        database.contactDao().insertContacts(listOf(newContact.toEntity()))
+
+                                        // Update UI and reset dialog state
                                         Toast.makeText(
                                             context,
                                             "Contact added successfully",
@@ -192,17 +233,19 @@ fun EmergencyContactsScreen() {
                                         mobile = ""
                                         showDialog = false
                                     } else {
+                                        // Handle server failure
                                         Toast.makeText(
                                             context,
-                                            "Failed to add contact",
+                                            "Failed to add contact to the server",
                                             Toast.LENGTH_SHORT
                                         ).show()
                                     }
                                 } catch (e: Exception) {
+                                    // Log and handle exceptions
                                     Log.e("API_ERROR", "Error: ${e.localizedMessage}")
                                     Toast.makeText(
                                         context,
-                                        "Error: ${e.localizedMessage}",
+                                        "Error adding contact: ${e.localizedMessage}",
                                         Toast.LENGTH_LONG
                                     ).show()
                                 }
@@ -218,6 +261,15 @@ fun EmergencyContactsScreen() {
     }
 }
 
+private fun isNetworkAvailable(context: Context): Boolean {
+    val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    val network = connectivityManager.activeNetwork
+    val networkCapabilities = connectivityManager.getNetworkCapabilities(network)
+    return networkCapabilities != null &&
+            (networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                    networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
+                    networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET))
+}
 // Function to load contacts
 private fun loadContacts(
     firebaseUID: String,
@@ -225,17 +277,47 @@ private fun loadContacts(
     coroutineScope: CoroutineScope,
     onSuccess: (List<EmergencyContact>) -> Unit
 ) {
+    val database = ContactDatabase.getInstance(context)
+    val contactDao = database.contactDao()
+
     coroutineScope.launch {
         try {
-            val userProfileResponse = Api().getUserProfile(firebaseUID)
-            if (userProfileResponse != null) {
-                onSuccess(userProfileResponse.data.emergencyContacts ?: emptyList())
+            // Always load local contacts first
+            val localContacts = contactDao.getAllContacts()
+            withContext(Dispatchers.Main) {
+                onSuccess(localContacts.map { it.toApiModel() })
+            }
+
+            // Check for network before making API calls
+            if (isNetworkAvailable(context)) {
+                val userProfileResponse = Api().getUserProfile(firebaseUID)
+                if (userProfileResponse != null) {
+                    val serverContacts = userProfileResponse.data.emergencyContacts ?: emptyList()
+
+                    // Update local database with server data
+                    contactDao.deleteAllContacts()
+                    contactDao.insertContacts(serverContacts.map { it.toEntity() })
+
+                    // Update UI with synced data
+                    withContext(Dispatchers.Main) {
+                        onSuccess(serverContacts)
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Failed to load contacts from server", Toast.LENGTH_SHORT).show()
+                    }
+                }
             } else {
-                Toast.makeText(context, "Failed to load contacts", Toast.LENGTH_SHORT).show()
+                Log.e("NetworkCheck", "No internet connection. Loading local data.")
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Offline mode: Showing local contacts", Toast.LENGTH_SHORT).show()
+                }
             }
         } catch (e: Exception) {
             Log.e("API_ERROR", "Error fetching contacts: ${e.localizedMessage}")
-            Toast.makeText(context, "Error fetching contacts", Toast.LENGTH_SHORT).show()
+            withContext(Dispatchers.Main) {
+                Toast.makeText(context, "Error fetching contacts", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 }
@@ -246,7 +328,6 @@ fun ContactCard(contact: EmergencyContact, onUpdate: (EmergencyContact) -> Unit,
     val maxOffset = 120f
     val animatedOffsetX by animateDpAsState(targetValue = offsetX.dp)
     val scope = rememberCoroutineScope()
-    val context = LocalContext.current
 
     var showEditDialog by remember { mutableStateOf(false) }
     var updatedName by remember { mutableStateOf(contact.name) }
