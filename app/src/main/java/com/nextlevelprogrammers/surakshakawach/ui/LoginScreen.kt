@@ -1,6 +1,8 @@
 package com.nextlevelprogrammers.surakshakawach.ui
 
+import Api
 import android.content.Intent
+import android.net.ConnectivityManager
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
@@ -16,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -29,11 +32,10 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
-import Api
-import androidx.compose.ui.layout.ContentScale
 import com.nextlevelprogrammers.surakshakawach.PermissionActivity
 import com.nextlevelprogrammers.surakshakawach.R
 import com.nextlevelprogrammers.surakshakawach.api.UserPreferences
+import com.nextlevelprogrammers.surakshakawach.utils.UserSessionManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -62,31 +64,39 @@ class LoginScreen : ComponentActivity() {
         googleSignInClient = GoogleSignIn.getClient(this, gso)
 
         // Set the UI content
-        setContent {
-            ProvideWindowInsets {
-                LoginScreenUI(
-                    onGenderSelected = { gender ->
-                        selectedGender = gender
-                    },
-                    onSignInClick = {
-                        // Check if gender is selected before sign-in
-                        if (selectedGender != null) {
-                            signInWithGoogle(false)
-                        } else {
-                            Toast.makeText(this, "Please select a gender before signing in.", Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    onCreateAccountClick = {
-                        // Check if gender is selected before account creation
-                        if (selectedGender != null) {
-                            signInWithGoogle(true)
-                        } else {
-                            Toast.makeText(this, "Please select a gender before creating an account.", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                )
-            }
-        }
+       if (UserSessionManager.isLoggedIn(this)) {
+           if (!isNetworkAvailable()) {
+               Toast.makeText(this, "No internet connection. Some features may be limited.", Toast.LENGTH_LONG).show()
+           }
+           navigateToNextScreen()
+       }
+       else {
+           setContent {
+               ProvideWindowInsets {
+                   LoginScreenUI(
+                       onGenderSelected = { gender ->
+                           selectedGender = gender
+                       },
+                       onSignInClick = {
+                           // Check if gender is selected before sign-in
+                           if (selectedGender != null) {
+                               signInWithGoogle(false)
+                           } else {
+                               Toast.makeText(this, "Please select a gender before signing in.", Toast.LENGTH_SHORT).show()
+                           }
+                       },
+                       onCreateAccountClick = {
+                           // Check if gender is selected before account creation
+                           if (selectedGender != null) {
+                               signInWithGoogle(true)
+                           } else {
+                               Toast.makeText(this, "Please select a gender before creating an account.", Toast.LENGTH_SHORT).show()
+                           }
+                       }
+                   )
+               }
+           }
+       }
     }
 
     private val googleSignInLauncher = registerForActivityResult(
@@ -118,6 +128,13 @@ class LoginScreen : ComponentActivity() {
                 auth.signInWithCredential(credential)
                     .addOnCompleteListener(this) { task ->
                         if (task.isSuccessful) {
+                            UserSessionManager.saveSession(
+                                this,
+                                auth.currentUser!!.uid,
+                                userName,
+                                userEmail
+                            )
+
                             if (selectedGender != null) {
                                 // Now differentiate between sign-in and create account
                                 if (isCreateAccount) {
@@ -216,9 +233,22 @@ class LoginScreen : ComponentActivity() {
     }
 
     private fun navigateToNextScreen() {
+        val session = UserSessionManager.getSession(this)
+        val userId = session["userId"]
+        val userName = session["userName"]
+        val userEmail = session["userEmail"]
+
+        Log.d("LoginScreen", "User logged in: $userId, $userName, $userEmail")
+
         val intent = Intent(this, PermissionActivity::class.java)
         startActivity(intent)
         finish()
+    }
+
+    private fun isNetworkAvailable(): Boolean {
+        val connectivityManager = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
+        val activeNetwork = connectivityManager.activeNetworkInfo
+        return activeNetwork != null && activeNetwork.isConnected
     }
 }
 

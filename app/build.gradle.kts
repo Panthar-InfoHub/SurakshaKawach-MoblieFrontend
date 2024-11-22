@@ -5,6 +5,7 @@ plugins {
     id("com.google.firebase.crashlytics")
     id("com.google.firebase.firebase-perf")
     id("org.jetbrains.kotlin.plugin.serialization") version "2.0.20"
+    id ("kotlin-kapt")
 }
 
 android {
@@ -14,9 +15,9 @@ android {
     defaultConfig {
         applicationId = "com.nextlevelprogrammers.surakshakawach"
         minSdk = 27
-        targetSdk = 34
-        versionCode = 13
-        versionName = "1.4.1.5"
+        targetSdk = 35
+        versionCode = 14
+        versionName = "1.4.1.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -111,4 +112,9 @@ dependencies {
     implementation ("androidx.compose.material3:material3:1.3.1")
     implementation ("ai.picovoice:porcupine-android:3.0.1")
     implementation ("ai.picovoice:rhino-android:3.0.1")
+    implementation ("androidx.room:room-runtime:2.6.1")
+    kapt ("androidx.room:room-compiler:2.6.1")
+    implementation ("androidx.room:room-ktx:2.6.1")
+    implementation ("androidx.work:work-runtime-ktx:2.10.0")
+    implementation ("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 }

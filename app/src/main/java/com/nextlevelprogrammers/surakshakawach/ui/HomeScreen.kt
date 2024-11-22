@@ -200,7 +200,7 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
     }
 
     // Start the countdown timer and navigate to SOSActivity
-    fun startTimer() {
+    fun  startTimer() {
         Log.d("SOS_TIMER", "Starting timer.")
         countdown = 5 // Reset countdown
         isSOSCanceled = false // Reset cancel flag
@@ -247,6 +247,7 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
         if (triggerSOS) {
             if (currentLocation != null) {
                 homeViewModel.resetSOS()
+                showModal = true
                 startTimer()
             } else {
                 Log.e("SOS", "Location not available.")
@@ -443,7 +444,6 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
                             isLoading = true
                             isProcessCompleted = false
                             sendSOSManually() // Trigger SOS request
-                            sendSOS()
                         },
                         onDismiss = {
                             showModal = false
