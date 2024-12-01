@@ -5,8 +5,11 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.CountDownTimer
 import android.os.Looper
+import android.telephony.SmsManager
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -56,8 +59,14 @@ import com.nextlevelprogrammers.surakshakawach.R
 import com.nextlevelprogrammers.surakshakawach.SOSActivity
 import com.nextlevelprogrammers.surakshakawach.VoiceRecognitionService
 import com.nextlevelprogrammers.surakshakawach.WatchActivity
+import com.nextlevelprogrammers.surakshakawach.data.ContactDatabase
+import com.nextlevelprogrammers.surakshakawach.utils.NetworkMonitor
+import com.nextlevelprogrammers.surakshakawach.utils.UserSessionManager
 import com.nextlevelprogrammers.surakshakawach.viewmodel.HomeViewModel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -65,6 +74,7 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocationProviderClient,homeViewModel: HomeViewModel = viewModel() ) {
+    val context = LocalContext.current
     var currentLocation by remember { mutableStateOf<LatLng?>(null) }
     var hasLocationPermission by remember { mutableStateOf(false) }
     var showModal by remember { mutableStateOf(false) }
@@ -75,8 +85,25 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
     var isLoading by remember { mutableStateOf(false) }
     var isProcessCompleted by remember { mutableStateOf(true) }
     var isRequestSent by remember { mutableStateOf(false) }
-    var isSOSButtonEnabled by remember { mutableStateOf(true) }
     val triggerSOS by homeViewModel.triggerSOS.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val isNetworkAvailable = remember { mutableStateOf(checkNetworkAvailability(context)) }
+
+    DisposableEffect(Unit) {
+        val networkMonitor = NetworkMonitor(context, object : NetworkMonitor.NetworkCallback {
+            override fun onNetworkChanged(isAvailable: Boolean) {
+                coroutineScope.launch {
+                    isNetworkAvailable.value = isAvailable
+                    snackbarHostState.showSnackbar(
+                        if (isAvailable) "Network is available" else "No network available"
+                    )
+                }
+            }
+        })
+
+        networkMonitor.startMonitoring()
+        onDispose { networkMonitor.stopMonitoring() }
+    }
 
     val markerState = remember { MarkerState(position = LatLng(0.0, 0.0)) }
     var showMapTypeSelector by remember { mutableStateOf(false) }
@@ -86,27 +113,28 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
 
     // Firebase UID
     val firebaseAuth = FirebaseAuth.getInstance()
-    val firebaseUID = firebaseAuth.currentUser?.uid
+    var firebaseUID = firebaseAuth.currentUser?.uid
 
     // Store ticket ID after the first ticket is created
     var sosTicketId: String? = null
-    val context = LocalContext.current
     val drawerState = rememberDrawerState(DrawerValue.Closed)
+
 
     // Request permission for location
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
+            coroutineScope.launch {
+                snackbarHostState.showSnackbar("Location permission granted")
+            }
             fusedLocationClient.lastLocation.addOnSuccessListener { location ->
                 location?.let { currentLocation = LatLng(it.latitude, it.longitude) }
-                val intent = Intent(context, VoiceRecognitionService::class.java)
-                context.startService(intent)
-//                isMapLoaded = true // Set map as loaded once location is retrieved
             }
         } else {
-            Log.e("LocationPermission", "Permission denied")
-            Log.e("VoiceRecognitionService", "RECORD_AUDIO permission denied.")
+            coroutineScope.launch {
+                snackbarHostState.showSnackbar("Location permission denied")
+            }
         }
     }
 
@@ -200,12 +228,12 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
     }
 
     // Start the countdown timer and navigate to SOSActivity
-    fun  startTimer() {
+    fun startTimer() {
         Log.d("SOS_TIMER", "Starting timer.")
         countdown = 5 // Reset countdown
         isSOSCanceled = false // Reset cancel flag
-        isSOSButtonEnabled = false
 
+        // Initialize and start the countdown timer
         countdownTimer = object : CountDownTimer(5000, 1000) {
             override fun onTick(millisUntilFinished: Long) {
                 countdown = (millisUntilFinished / 1000).toInt()
@@ -213,30 +241,45 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
             }
 
             override fun onFinish() {
-                Log.d("SOS_TIMER", "Timer finished.")
-                if (!isSOSCanceled && !isRequestSent) {
+                if (isSOSCanceled) {
+                    Log.d("SOS_TIMER", "SOS request canceled by the user.")
+                    return
+                }
+
+                if (!isRequestSent) {
                     Log.d("SOS_TIMER", "SOS request will be sent now.")
-                    isRequestSent = true // Set flag to prevent further requests
+                    isRequestSent = true
+
                     coroutineScope.launch {
                         try {
-                            handleSOSTicket(firebaseUID ?: return@launch)
-                            // Check if sosTicketId is not null before navigating
-                            if (sosTicketId != null) {
-                                Log.d("SOS_NAVIGATION", "Navigating to SOSActivity with ticket ID: $sosTicketId")
-                                val intent = Intent(context, SOSActivity::class.java)
-                                intent.putExtra("sosTicketId", sosTicketId)
+                            // Fetch Firebase UID from UserSessionManager
+                            val sessionData = UserSessionManager.getSession(context)
+                            firebaseUID = sessionData["userId"]
+
+                            if (firebaseUID.isNullOrEmpty()) {
+                                Log.e("SOS", "Invalid user session. Aborting SOS request.")
+                                isRequestSent = false
+                                return@launch
+                            }
+
+                            // Handle the SOS ticket creation
+                            handleSOSTicket(firebaseUID)
+
+                            // Proceed to SOSActivity only if ticket is created successfully
+                            if (!sosTicketId.isNullOrEmpty()) {
+                                val intent = Intent(context, SOSActivity::class.java).apply {
+                                    putExtra("sosTicketId", sosTicketId)
+                                }
                                 context.startActivity(intent)
                             } else {
-                                Log.e("SOS_TICKET", "SOS Ticket ID is null! Cannot proceed to SOSActivity.")
-                                // Optionally notify the user about the failure
+                                Log.e("SOS_TIMER", "Failed to create SOS ticket. Cannot navigate to SOSActivity.")
                             }
                         } catch (e: Exception) {
-                            Log.e("SOS", "Failed to send SOS request", e)
-                            // Optionally notify the user about the failure
+                            Log.e("SOS", "Failed to send SOS request: ${e.localizedMessage}", e)
+                        } finally {
+                            isRequestSent = false
                         }
                     }
-                } else {
-                    Log.d("SOS_TIMER", "SOS request canceled or already sent.")
                 }
             }
         }.start()
@@ -255,31 +298,144 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
         }
     }
 
-    // Unified function to handle SOS sending
-    fun sendSOS() {
-        coroutineScope.launch {
+    fun sendSMSToContacts(
+        context: Context,
+        firebaseUID: String,
+        ticketId: String,
+        latitude: Double?,
+        longitude: Double?
+    ) {
+        if (latitude == null || longitude == null) {
+            Log.e("SOS_SMS", "Location not available, cannot send SMS.")
+            Toast.makeText(context, "Location not available", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        Log.d("SOS_SMS", "Starting SMS sending process. Firebase UID: $firebaseUID, Ticket ID: $ticketId")
+
+        CoroutineScope(Dispatchers.IO).launch {
             try {
-                handleSOSTicket(firebaseUID ?: return@launch)
-                if (sosTicketId != null) {
-                    val intent = Intent(context, SOSActivity::class.java).apply {
-                        putExtra("sosTicketId", sosTicketId)
+                val database = ContactDatabase.getInstance(context)
+                val contacts = database.contactDao().getAllContacts()
+
+                if (contacts.isEmpty()) {
+                    Log.w("SOS_SMS", "No emergency contacts found in local database.")
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "No emergency contacts found", Toast.LENGTH_SHORT).show()
                     }
-                    context.startActivity(intent)
+                    return@launch
+                }
+
+                Log.d("SOS_SMS", "Emergency contacts fetched from database: ${contacts.size} contacts found.")
+
+                val smsManager = SmsManager.getDefault()
+                val url = if (ticketId == "offline_ticket") {
+                    "Location: https://www.google.com/maps?q=$latitude,$longitude\nUser ID: $firebaseUID"
                 } else {
-                    Log.e("SOS_TICKET", "SOS Ticket ID is null! Cannot proceed to SOSActivity.")
+                    "https://suraksha.pantharinfohub.com/sos/view?ticketId=$ticketId&firebaseUID=$firebaseUID"
+                }
+                val message = "SOS Alert!\n$url"
+
+                Log.d("SOS_SMS", "Prepared SMS content: $message")
+
+                for (contact in contacts) {
+                    try {
+                        Log.d("SOS_SMS", "Attempting to send SMS to ${contact.mobile}")
+                        smsManager.sendTextMessage(contact.mobile, null, message, null, null)
+                        Log.i("SOS_SMS", "SMS sent successfully to ${contact.mobile}")
+                    } catch (e: Exception) {
+                        Log.e("SOS_SMS", "Failed to send SMS to ${contact.mobile}: ${e.localizedMessage}", e)
+                    }
+                }
+
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "SOS SMS sent to emergency contacts", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
-                Log.e("SOS", "Failed to send SOS request", e)
-            } finally {
-                isSOSButtonEnabled = true // Re-enable the SOS button after the request
-                isLoading = false
-                isRequestSent = false
-                isProcessCompleted = true
-                isSOSButtonEnabled = true
+                Log.e("SOS_SMS", "Error during SMS sending process: ${e.localizedMessage}", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Failed to send SMS", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
 
+    // Unified function to handle SOS sending
+    fun sendSOS() {
+        coroutineScope.launch {
+            try {
+                Log.d("SOS_FLOW", "Initiating sendSOS function.")
+
+                // Retrieve Firebase UID from SharedPreferences if null
+                if (firebaseUID == null) {
+                    firebaseUID = UserSessionManager.getSession(context)["userId"]
+                    Log.d("SOS_SMS", "Fetched Firebase UID from session: $firebaseUID")
+                }
+
+                // Log current location
+                if (currentLocation == null) {
+                    Log.d("SOS_SMS", "Attempting to fetch current location.")
+                    fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                        location?.let {
+                            currentLocation = LatLng(it.latitude, it.longitude)
+                            Log.d("SOS_SMS", "Fetched location: $currentLocation")
+                        } ?: run {
+                            Log.e("SOS_SMS", "Unable to fetch location.")
+                        }
+                    }
+                }
+
+                fun isNetworkAvailable(context: Context): Boolean {
+                    val connectivityManager =
+                        context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+                    val network = connectivityManager.activeNetwork
+                    val networkCapabilities = connectivityManager.getNetworkCapabilities(network)
+                    return networkCapabilities != null &&
+                            (networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                                    networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR))
+                }
+
+                // Proceed with network-based or SMS-based SOS
+                if (firebaseUID != null && currentLocation != null) {
+                    if (isNetworkAvailable(context)) {
+                        Log.d("SOS_FLOW", "Network is available. Proceeding with API-based SOS ticket handling.")
+
+                        handleSOSTicket(firebaseUID)
+                        if (sosTicketId != null) {
+                            Log.d("SOS_FLOW", "SOS Ticket ID: $sosTicketId, Location: $currentLocation")
+
+                            val intent = Intent(context, SOSActivity::class.java).apply {
+                                putExtra("sosTicketId", sosTicketId)
+                            }
+                            context.startActivity(intent)
+                        } else {
+                            Log.e("SOS_TICKET", "SOS Ticket ID is null! Cannot proceed to SOSActivity.")
+                        }
+                    } else {
+                        Log.d("SOS_FLOW", "Network is not available. Attempting to send SMS to emergency contacts.")
+
+                        sendSMSToContacts(
+                            context = context,
+                            firebaseUID = firebaseUID!!,
+                            ticketId = "offline_ticket", // Use a placeholder ticket ID for offline
+                            latitude = currentLocation?.latitude,
+                            longitude = currentLocation?.longitude
+                        )
+                    }
+                } else {
+                    Log.e("SOS_SMS", "Firebase UID or location is null! Cannot send SMS.")
+                }
+            } catch (e: Exception) {
+                Log.e("SOS", "Failed to send SOS request", e)
+            } finally {
+                Log.d("SOS_FLOW", "Finalizing SOS request. Resetting button state.")
+
+                isLoading = false
+                isRequestSent = false
+                isProcessCompleted = true
+            }
+        }
+    }
 
     // Function to manually trigger SOS after "Confirm"
     fun sendSOSManually() {
@@ -298,14 +454,28 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
         drawerState = drawerState,
         drawerContent = {
             DrawerContent(
-                onProfileClicked = { /* Handle Profile click */ },
+                onProfileClicked = { navController.navigate("dashboard") },
                 onEmergencyContactsClicked = {
                     coroutineScope.launch {
                         navController.navigate("emergency_contacts")
                         drawerState.close()
                     }
                 },
-                onLogoutClicked = { /* Handle Logout click */ },
+                onLogoutClicked = {
+                    coroutineScope.launch {
+                        // Clear user session
+                        UserSessionManager.clearSession(context)
+
+                        // Sign out from Firebase
+                        FirebaseAuth.getInstance().signOut()
+
+                        // Navigate to Login screen and clear backstack
+                        val intent = Intent(context, LoginScreen::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                        }
+                        context.startActivity(intent)
+                    }
+                },
                 onHelpClicked = { /* Handle Help click */ },
                 onCloseDrawer = { coroutineScope.launch { drawerState.close() } }
             )
@@ -335,7 +505,8 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
             },
             bottomBar = {
                 BottomNavBar(navController)
-            }
+            },
+            snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         ) { paddingValues ->
             Column(
                 modifier = Modifier
@@ -457,6 +628,14 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
             }
         }
     }
+}
+
+fun checkNetworkAvailability(context: Context): Boolean {
+    val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    val network = connectivityManager.activeNetwork ?: return false
+    val networkCapabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+    return networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+            networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
 }
 
 @Composable

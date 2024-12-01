@@ -122,6 +122,7 @@ class LoginScreen : ComponentActivity() {
             val idToken = account.idToken
             val userName = account.displayName
             val userEmail = account.email
+            val userGender = selectedGender
 
             if (idToken != null && userName != null && userEmail != null) {
                 val credential = GoogleAuthProvider.getCredential(idToken, null)
@@ -132,26 +133,22 @@ class LoginScreen : ComponentActivity() {
                                 this,
                                 auth.currentUser!!.uid,
                                 userName,
-                                userEmail
+                                userEmail,
+                                userGender.toString()
                             )
-
                             if (selectedGender != null) {
-                                // Now differentiate between sign-in and create account
                                 if (isCreateAccount) {
-                                    createUserInBackend(userName, userEmail, selectedGender!!) // Passing gender now
+                                    createUserInBackend(userName, userEmail, selectedGender!!)
                                 } else {
-                                    sendUserDataToBackend(userName, userEmail, selectedGender!!) // Passing gender now
+                                    sendUserDataToBackend(userName, userEmail, selectedGender!!)
                                 }
-                            } else {
-                                Toast.makeText(this, "Please select a gender before proceeding.", Toast.LENGTH_SHORT).show()
                             }
                         } else {
                             Log.e("LoginScreen", "Authentication failed: ${task.exception?.message}")
-                            Toast.makeText(this, "Authentication Failed.", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this, "Authentication Failed: ${task.exception?.message}", Toast.LENGTH_LONG).show()
                         }
                     }
             } else {
-                Log.e("LoginScreen", "Google Sign-In failed: idToken, userName, or userEmail is null.")
                 Toast.makeText(this, "Google Sign-In failed. Please try again.", Toast.LENGTH_SHORT).show()
             }
         } ?: run {
@@ -247,8 +244,10 @@ class LoginScreen : ComponentActivity() {
 
     private fun isNetworkAvailable(): Boolean {
         val connectivityManager = getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager
-        val activeNetwork = connectivityManager.activeNetworkInfo
-        return activeNetwork != null && activeNetwork.isConnected
+        val network = connectivityManager.activeNetwork ?: return false
+        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) ||
+                capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR)
     }
 }
 

@@ -95,7 +95,8 @@ class PermissionActivity : ComponentActivity() {
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.READ_CONTACTS,
             Manifest.permission.CAMERA,
-            Manifest.permission.RECORD_AUDIO
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.SEND_SMS
         )
 
         // Add POST_NOTIFICATIONS permission if on Android 13+
@@ -145,6 +146,7 @@ class PermissionActivity : ComponentActivity() {
                     Text("- Contacts: To manage emergency contacts.")
                     Text("- Camera: For capturing images.")
                     Text("- Microphone: For wake word detection.")
+                    Text("- SMS: To send emergency alerts via SMS.")
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         Text("- Notifications: For alerting you about critical events.")
                     }
