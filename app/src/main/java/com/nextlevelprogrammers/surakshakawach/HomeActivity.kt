@@ -16,6 +16,7 @@ import androidx.activity.viewModels
 import androidx.annotation.RequiresApi
 import androidx.compose.runtime.Composable
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -26,13 +27,18 @@ import com.google.firebase.auth.FirebaseAuth
 import com.nextlevelprogrammers.surakshakawach.ui.DashboardScreen
 import com.nextlevelprogrammers.surakshakawach.ui.EmergencyContactsScreen
 import com.nextlevelprogrammers.surakshakawach.ui.HomeScreen
+import com.nextlevelprogrammers.surakshakawach.utils.NetworkMonitor
 import com.nextlevelprogrammers.surakshakawach.viewmodel.HomeViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 class HomeActivity : ComponentActivity() {
 
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private val homeViewModel: HomeViewModel by viewModels()
+    private lateinit var networkMonitor: NetworkMonitor
 
     // Define the BroadcastReceiver
     private val wakeWordReceiver = object : BroadcastReceiver() {
@@ -59,6 +65,27 @@ class HomeActivity : ComponentActivity() {
         val intentFilter = IntentFilter("com.nextlevelprogrammers.surakshakawach.WAKE_WORD_DETECTED")
         registerReceiver(wakeWordReceiver, intentFilter, Context.RECEIVER_NOT_EXPORTED)
 
+        // Initialize and start network monitoring
+        networkMonitor = NetworkMonitor(this, object : NetworkMonitor.NetworkCallback {
+            override fun onNetworkChanged(isAvailable: Boolean) {
+                if (isAvailable) {
+                    lifecycleScope.launch {
+                        try {
+                            autoSyncData()
+                        } catch (e: Exception) {
+                            Log.e("HomeActivity", "Error during auto-sync: ${e.message}")
+                        }
+                    }
+                } else {
+                    runOnUiThread {
+                        Toast.makeText(this@HomeActivity, "Network unavailable. Sync paused.", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        })
+
+        networkMonitor.startMonitoring()
+
         // Start voice recognition service
         startService(Intent(this, VoiceRecognitionService::class.java))
 
@@ -83,6 +110,8 @@ class HomeActivity : ComponentActivity() {
         } catch (e: IllegalArgumentException) {
             Log.w("HomeActivity", "Receiver was not registered: ${e.message}")
         }
+
+        networkMonitor.stopMonitoring()
         super.onDestroy()
     }
 
@@ -109,6 +138,30 @@ class HomeActivity : ComponentActivity() {
         startActivity(intent)
         finish()
     }
+
+        private suspend fun autoSyncData() {
+            lifecycleScope.launch(Dispatchers.IO) {
+                try {
+                    val firebaseUID = FirebaseAuth.getInstance().currentUser?.uid
+                    if (firebaseUID != null) {
+                        // Fetch or sync data with session manager
+                        val sessionData = homeViewModel.fetchSessionData(firebaseUID)
+                        homeViewModel.syncSessionData(firebaseUID, sessionData)
+
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(this@HomeActivity, "Sync successful!", Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        Log.e("HomeActivity", "Firebase UID is null. Cannot sync.")
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@HomeActivity, "Sync failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                    Log.e("HomeActivity", "Error during sync: ${e.message}", e)
+                }
+            }
+        }
 }
 
 @Composable

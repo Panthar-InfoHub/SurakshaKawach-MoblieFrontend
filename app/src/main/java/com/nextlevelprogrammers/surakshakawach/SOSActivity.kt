@@ -52,6 +52,7 @@ import com.google.android.gms.location.LocationServices
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.storage.FirebaseStorage
 import com.nextlevelprogrammers.surakshakawach.ui.getCurrentTimestamp
+import com.nextlevelprogrammers.surakshakawach.utils.UserSessionManager
 import io.ktor.utils.io.errors.IOException
 import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
@@ -139,6 +140,16 @@ class SOSActivity : ComponentActivity() {
         startAudioRecordingAtIntervals()
         startImageCapture()
         startUpdatingCoordinates()
+    }
+
+    private fun getFirebaseUIDOrFallback(): String? {
+        val sessionData = UserSessionManager.getSession(this)
+        val firebaseUID = sessionData["userId"]
+        if (firebaseUID.isNullOrEmpty()) {
+            Log.e("SOSActivity", "Firebase UID not found in session.")
+            return null
+        }
+        return firebaseUID
     }
 
     private fun checkMultiplePermissionsAndStartUpdates() {
@@ -260,7 +271,7 @@ class SOSActivity : ComponentActivity() {
         val imageCapture = imageCapture ?: return
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val photoFile = File(externalMediaDirs.first(), "IMG_$timestamp.jpg")
-        val firebaseUID = FirebaseAuth.getInstance().currentUser?.uid ?: ""
+        val firebaseUID = getFirebaseUIDOrFallback() ?: ""
 
         val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
 
@@ -308,6 +319,7 @@ class SOSActivity : ComponentActivity() {
     }
 
     private fun uploadImageToFirebase(file: File, firebaseUID: String) {
+        val firebaseUID = getFirebaseUIDOrFallback() ?: return
         val fileUri: Uri = Uri.fromFile(file)
         val storageReference = FirebaseStorage.getInstance()
             .getReference("emergency-images/${file.name}")
@@ -394,6 +406,7 @@ class SOSActivity : ComponentActivity() {
     }
 
     private fun uploadAudioToFirebase(audioFile: File, firebaseUID: String) {
+        val firebaseUID = getFirebaseUIDOrFallback() ?: return
         val fileUri: Uri = Uri.fromFile(audioFile)
         val storageReference = FirebaseStorage.getInstance()
             .getReference("emergency-audio/${audioFile.name}")
@@ -489,7 +502,7 @@ class SOSActivity : ComponentActivity() {
             // Update the coordinates for the existing ticket
             lifecycleScope.launch {
                 val success = api.updateCoordinates(
-                    firebaseUID = FirebaseAuth.getInstance().currentUser?.uid ?: return@launch,
+                    firebaseUID = getFirebaseUIDOrFallback() ?: return@launch,
                     ticketId = sosTicketId!!,
                     latitude = latitude.toString(),
                     longitude = longitude.toString(),
@@ -537,8 +550,8 @@ class SOSActivity : ComponentActivity() {
 
 
     private fun closeSOSTicket(onSuccess: () -> Unit, onError: (String) -> Unit) {
+        val firebaseUID = getFirebaseUIDOrFallback()
         val api = Api()
-        val firebaseUID = FirebaseAuth.getInstance().currentUser?.uid
 
         if (firebaseUID != null && sosTicketId != null) { // Ensure we have a ticket ID
             Log.d("SOSActivity", "Attempting to close ticket with ID: $sosTicketId for UID: $firebaseUID")

@@ -31,7 +31,7 @@ fun IntroductionScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val api = Api()
     var isUserExists by remember { mutableStateOf<Boolean?>(null) }
-    var currentPage by remember { mutableStateOf(0) }
+    var currentPage by remember { mutableIntStateOf(0) }
     val descriptions = listOf(
         "Suraksha Kawach ensures your personal safety",
         "Quick emergency alerts and live sharing"
