@@ -3,9 +3,14 @@ package com.nextlevelprogrammers.surakshakawach.api
 import kotlinx.serialization.Serializable
 
 @Serializable
-data
-class AddAudioRequest(
+data class ClipData(
+    val url: String,
+    val timestamp: Long
+)
+
+@Serializable
+data class AddAudioRequest(
     val ticketId: String,
     val firebaseUID: String,
-    val clipUrls: List<String>
+    val clips_data: List<ClipData>
 )
