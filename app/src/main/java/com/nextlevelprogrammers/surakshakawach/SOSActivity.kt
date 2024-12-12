@@ -51,6 +51,8 @@ import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.storage.FirebaseStorage
+import com.nextlevelprogrammers.surakshakawach.api.ClipData
+import com.nextlevelprogrammers.surakshakawach.api.ImageData
 import com.nextlevelprogrammers.surakshakawach.ui.getCurrentTimestamp
 import com.nextlevelprogrammers.surakshakawach.utils.UserSessionManager
 import io.ktor.utils.io.errors.IOException
@@ -78,7 +80,7 @@ class SOSActivity : ComponentActivity() {
     private var isCapturingImages = false
     private var mediaRecorder: MediaRecorder? = null
     private lateinit var locationCallback: LocationCallback
-    private val imageUrls = mutableListOf<String>()
+    private val imageDataList = mutableListOf<ImageData>()
     private var lastCaptureTimestamp = 0L // Store the last capture timestamp
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -283,8 +285,8 @@ class SOSActivity : ComponentActivity() {
                     Log.d("CameraX", "Photo captured: ${photoFile.absolutePath}")
                     val compressedFile = compressImage(photoFile)
 
-                    // Pass the 'firebaseUID' along with the compressed file
-                    uploadImageToFirebase(compressedFile, firebaseUID)
+                    // Pass the 'firebaseUID' along with the compressed file and capture timestamp
+                    uploadImageToFirebase(compressedFile, firebaseUID, currentTimestamp)
                 }
 
                 override fun onError(exception: ImageCaptureException) {
@@ -318,7 +320,7 @@ class SOSActivity : ComponentActivity() {
         return compressedFile
     }
 
-    private fun uploadImageToFirebase(file: File, firebaseUID: String) {
+    private fun uploadImageToFirebase(file: File, firebaseUID: String, captureTimestamp: Long) {
         val firebaseUID = getFirebaseUIDOrFallback() ?: return
         val fileUri: Uri = Uri.fromFile(file)
         val storageReference = FirebaseStorage.getInstance()
@@ -330,12 +332,12 @@ class SOSActivity : ComponentActivity() {
                 storageReference.downloadUrl.addOnSuccessListener { uri ->
                     Log.d("SOS_TICKET", "Image uploaded successfully: $uri")
 
-                    // Add the URL to the list of image URLs
-                    val imageUrl = uri.toString()
-                    imageUrls.add(imageUrl) // Add to the list of image URLs
+                    // Create ImageData and add to the list
+                    val imageData = ImageData(url = uri.toString(), timestamp = captureTimestamp)
+                    imageDataList.add(imageData)
 
-                    // Now send the URL array and the latest image URL to the backend
-                    sendImageUrlToBackend(firebaseUID, imageUrl, imageUrls)
+                    // Now send the image data to the backend
+                    sendImageDataToBackend(firebaseUID, imageDataList)
 
                     file.delete() // Optionally delete the file after upload
                 }
@@ -345,24 +347,24 @@ class SOSActivity : ComponentActivity() {
             }
     }
 
-    private fun sendImageUrlToBackend(firebaseUID: String, latestImageUrl: String, imageUrls: List<String>) {
+    private fun sendImageDataToBackend(firebaseUID: String, imagesData: List<ImageData>) {
         if (sosTicketId != null) {
-            Log.d("SOS_TICKET", "Preparing to send image URLs to backend. SOS Ticket ID: $sosTicketId")
+            Log.d("SOS_TICKET", "Preparing to send image data to backend. SOS Ticket ID: $sosTicketId")
 
             lifecycleScope.launch {
                 try {
-                    val success = Api().sendImages(sosTicketId!!, firebaseUID, imageUrls)
+                    val success = Api().sendImages(sosTicketId!!, firebaseUID, imagesData)
                     if (success) {
-                        Log.d("SOS_TICKET", "Image URLs sent successfully to the server")
+                        Log.d("SOS_TICKET", "Image data sent successfully to the server")
                     } else {
-                        Log.e("SOS_TICKET", "Failed to send image URLs for ticket ID: $sosTicketId")
+                        Log.e("SOS_TICKET", "Failed to send image data for ticket ID: $sosTicketId")
                     }
                 } catch (e: Exception) {
-                    Log.e("SOS_TICKET", "Error while sending image URLs: ${e.localizedMessage}", e)
+                    Log.e("SOS_TICKET", "Error while sending image data: ${e.localizedMessage}", e)
                 }
             }
         } else {
-            Log.e("SOS_TICKET", "Cannot send image URLs. SOS ticket ID is null.")
+            Log.e("SOS_TICKET", "Cannot send image data. SOS ticket ID is null.")
         }
     }
 
@@ -381,8 +383,9 @@ class SOSActivity : ComponentActivity() {
     }
 
     private fun startAudioRecording() {
-        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        val audioFile = File(externalMediaDirs.first(), "AUDIO_$timestamp.mp3")
+        val timestamp = System.currentTimeMillis()
+        val formattedTimestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val audioFile = File(externalMediaDirs.first(), "AUDIO_$formattedTimestamp.mp3")
         val firebaseUID = FirebaseAuth.getInstance().currentUser?.uid ?: ""
 
         mediaRecorder = MediaRecorder().apply {
@@ -401,11 +404,11 @@ class SOSActivity : ComponentActivity() {
 
         handler.postDelayed({
             stopAudioRecording()
-            uploadAudioToFirebase(audioFile, firebaseUID)
+            uploadAudioToFirebase(audioFile, firebaseUID, timestamp)
         }, audioRecordingDuration)
     }
 
-    private fun uploadAudioToFirebase(audioFile: File, firebaseUID: String) {
+    private fun uploadAudioToFirebase(audioFile: File, firebaseUID: String, captureTimestamp: Long) {
         val firebaseUID = getFirebaseUIDOrFallback() ?: return
         val fileUri: Uri = Uri.fromFile(audioFile)
         val storageReference = FirebaseStorage.getInstance()
@@ -418,9 +421,13 @@ class SOSActivity : ComponentActivity() {
                 // Get the audio file URL from Firebase
                 storageReference.downloadUrl.addOnSuccessListener { uri ->
                     val audioUrl = uri.toString()
-                    // Update the backend with the audio clip URL
-                    sendClipsUrlToBackend(firebaseUID, listOf(audioUrl))
-                    audioFile.delete()
+                    Log.d("SOS_TICKET", "Audio URL retrieved: $audioUrl")
+
+                    // Create a ClipData object with URL and timestamp
+                    val clipData = ClipData(url = audioUrl, timestamp = captureTimestamp)
+                    sendClipsDataToBackend(firebaseUID, listOf(clipData))
+
+                    audioFile.delete() // Optionally delete the file after upload
                 }.addOnFailureListener {
                     Log.e("SOS_TICKET", "Failed to get audio URL: ${it.message}")
                 }
@@ -430,24 +437,24 @@ class SOSActivity : ComponentActivity() {
             }
     }
 
-    private fun sendClipsUrlToBackend(firebaseUID: String, clipUrls: List<String>) {
+    private fun sendClipsDataToBackend(firebaseUID: String, clipsData: List<ClipData>) {
         if (sosTicketId != null) {
-            Log.d("SOS_TICKET", "Preparing to send audio clip URLs to backend. SOS Ticket ID: $sosTicketId")
+            Log.d("SOS_TICKET", "Preparing to send audio clip data to backend. SOS Ticket ID: $sosTicketId")
 
             lifecycleScope.launch {
                 try {
-                    val success = Api().sendAudioClips(sosTicketId!!, firebaseUID, clipUrls)
+                    val success = Api().sendAudioClips(sosTicketId!!, firebaseUID, clipsData)
                     if (success) {
-                        Log.d("SOS_TICKET", "Audio clip URLs sent successfully to the server")
+                        Log.d("SOS_TICKET", "Audio clip data sent successfully to the server")
                     } else {
-                        Log.e("SOS_TICKET", "Failed to send audio clip URLs for ticket ID: $sosTicketId")
+                        Log.e("SOS_TICKET", "Failed to send audio clip data for ticket ID: $sosTicketId")
                     }
                 } catch (e: Exception) {
-                    Log.e("SOS_TICKET", "Error while sending audio clip URLs: ${e.localizedMessage}", e)
+                    Log.e("SOS_TICKET", "Error while sending audio clip data: ${e.localizedMessage}", e)
                 }
             }
         } else {
-            Log.e("SOS_TICKET", "Cannot send audio clip URLs. SOS ticket ID is null.")
+            Log.e("SOS_TICKET", "Cannot send audio clip data. SOS ticket ID is null.")
         }
     }
 

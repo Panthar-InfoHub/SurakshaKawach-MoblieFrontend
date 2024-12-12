@@ -7,7 +7,9 @@ import com.nextlevelprogrammers.surakshakawach.api.UserProfileResponse
 import com.nextlevelprogrammers.surakshakawach.api.AddAudioRequest
 import com.nextlevelprogrammers.surakshakawach.api.AddImageRequest
 import com.nextlevelprogrammers.surakshakawach.api.ApiResponse
+import com.nextlevelprogrammers.surakshakawach.api.ClipData
 import com.nextlevelprogrammers.surakshakawach.api.Coordinates
+import com.nextlevelprogrammers.surakshakawach.api.ImageData
 import com.nextlevelprogrammers.surakshakawach.api.TicketDetailsResponse
 import com.nextlevelprogrammers.surakshakawach.api.TicketInfo
 import io.ktor.client.HttpClient
@@ -300,9 +302,9 @@ class Api {
         }
     }
 
-    suspend fun sendImages(ticketId: String, firebaseUID: String, imageUrls: List<String>): Boolean {
+    suspend fun sendImages(ticketId: String, firebaseUID: String, imagesData: List<ImageData>): Boolean {
         val url = "https://surakshakawach-mobilebackend-192854867616.asia-south2.run.app/api/v1/ticket/add-images"
-        val requestBody = AddImageRequest(ticketId, firebaseUID, imageUrls)
+        val requestBody = AddImageRequest(ticketId, firebaseUID, imagesData)
 
         return try {
             val response: HttpResponse = client.post(url) {
@@ -311,10 +313,10 @@ class Api {
             }
 
             if (response.status == HttpStatusCode.OK) {
-                Log.d("API_SEND_IMAGES", "Image URLs sent successfully. Status: ${response.status}")
+                Log.d("API_SEND_IMAGES", "Image data sent successfully. Status: ${response.status}")
                 true
             } else {
-                Log.e("API_SEND_IMAGES", "Failed to send images. Status: ${response.status}")
+                Log.e("API_SEND_IMAGES", "Failed to send image data. Status: ${response.status}")
                 false
             }
         } catch (e: ClientRequestException) {
@@ -331,16 +333,22 @@ class Api {
 
 
 
-    suspend fun sendAudioClips(ticketId: String, firebaseUID: String, clipUrls: List<String>): Boolean {
+    suspend fun sendAudioClips(ticketId: String, firebaseUID: String, clipsData: List<ClipData>): Boolean {
         val url = "https://surakshakawach-mobilebackend-192854867616.asia-south2.run.app/api/v1/ticket/add-audio-clips" // Replace with the actual server URL
-        val requestBody = AddAudioRequest(ticketId, firebaseUID, clipUrls)
+        val requestBody = AddAudioRequest(ticketId, firebaseUID, clipsData)
 
         return try {
             val response: HttpResponse = client.post(url) {
                 contentType(ContentType.Application.Json)
-                setBody(requestBody)
+                setBody(requestBody) // Serializing the AddAudioRequest object to JSON
             }
-            response.status == HttpStatusCode.OK
+            if (response.status == HttpStatusCode.OK) {
+                println("Audio clips sent successfully")
+                true
+            } else {
+                println("Failed to send audio clips. Status: ${response.status}")
+                false
+            }
         } catch (e: Exception) {
             println("Error sending audio clips: ${e.message}")
             false
