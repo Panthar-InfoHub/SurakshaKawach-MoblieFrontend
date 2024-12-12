@@ -77,9 +77,6 @@ class HomeActivity : ComponentActivity() {
                         }
                     }
                 } else {
-                    runOnUiThread {
-                        Toast.makeText(this@HomeActivity, "Network unavailable. Sync paused.", Toast.LENGTH_SHORT).show()
-                    }
                 }
             }
         })
@@ -149,7 +146,6 @@ class HomeActivity : ComponentActivity() {
                         homeViewModel.syncSessionData(firebaseUID, sessionData)
 
                         withContext(Dispatchers.Main) {
-                            Toast.makeText(this@HomeActivity, "Sync successful!", Toast.LENGTH_SHORT).show()
                         }
                     } else {
                         Log.e("HomeActivity", "Firebase UID is null. Cannot sync.")
