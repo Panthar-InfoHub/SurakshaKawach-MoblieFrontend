@@ -484,23 +484,62 @@ fun HomeScreen(navController: NavHostController, fusedLocationClient: FusedLocat
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("Suraksha Kawach") },
-                    actions = {
-                        IconButton(onClick = { navController.navigate("dashboard") }) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.ic_profile),
-                                contentDescription = "User Profile",
-                                tint = Color.Black
-                            )
+                    title = {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Profile Icon
+                            IconButton(onClick = { coroutineScope.launch { drawerState.open() } }) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.ic_profile),
+                                    contentDescription = "User Profile",
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(40.dp)
+                                )
+                            }
+
+                            // Location Section
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(Color.White)
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.ic_location),
+                                    contentDescription = "Location Icon",
+                                    tint = Color.Blue,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Location",
+                                    style = MaterialTheme.typography.bodyMedium.copy(color = Color.Black)
+                                )
+                            }
+
+                            // Notifications Icon
+                            IconButton(onClick = {
+                                Toast.makeText(context, "Work on notifications is ongoing", Toast.LENGTH_SHORT).show()
+                            }) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.outline_notifications_24),
+                                    contentDescription = "Notifications",
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(40.dp)
+                                )
+                            }
                         }
-                        IconButton(onClick = { coroutineScope.launch { drawerState.open() } }) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.ic_settings),
-                                contentDescription = "Settings",
-                                tint = Color.Black
-                            )
-                        }
-                    }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent
+                    ),
+                    scrollBehavior = null
                 )
             },
             bottomBar = {
@@ -703,7 +742,7 @@ fun DrawerContent(
             DrawerItem(text = "Profile", onClick = onProfileClicked)
             DrawerItem(text = "Emergency Contacts", onClick = onEmergencyContactsClicked)
             DrawerItem(text = "Logout", onClick = onLogoutClicked)
-            Spacer(modifier = Modifier.weight(1f)) // Pushes the Help item to the bottom
+            Spacer(modifier = Modifier.weight(1f))
             DrawerItem(text = "Help", onClick = onHelpClicked)
         }
     }
@@ -787,7 +826,7 @@ fun BottomNavBar(navController: NavHostController) {
             selected = true,
             onClick = { navController.navigate("home") },
             icon = { Icon(
-                painter = painterResource(id = R.drawable.home), // Use your custom drawable resource
+                painter = painterResource(id = R.drawable.home),
                 contentDescription = "Home"
             ) }
         )
@@ -818,7 +857,7 @@ fun BottomNavBar(navController: NavHostController) {
                 context.startActivity(intent)
             },
             icon = { Icon(
-                painter = painterResource(id = R.drawable.watch), // Use your custom drawable resource
+                painter = painterResource(id = R.drawable.watch),
                 contentDescription = "Home"
             ) }
         )
@@ -828,7 +867,7 @@ fun BottomNavBar(navController: NavHostController) {
                 Toast.makeText(context, "Ongoing Work", Toast.LENGTH_SHORT).show()
             },
             icon = { Icon(
-                painter = painterResource(id = R.drawable.notifications), // Use your custom drawable resource
+                painter = painterResource(id = R.drawable.notifications),
                 contentDescription = "Home"
             ) }
         )
@@ -838,7 +877,7 @@ fun BottomNavBar(navController: NavHostController) {
                 Toast.makeText(context, "Ongoing Work", Toast.LENGTH_SHORT).show()
             },
             icon = { Icon(
-                painter = painterResource(id = R.drawable.history), // Use your custom drawable resource
+                painter = painterResource(id = R.drawable.history),
                 contentDescription = "Home"
             ) }
         )
@@ -865,7 +904,7 @@ fun MapTypeOption(name: String, onClick: () -> Unit) {
 
 @Composable
 fun ShimmerEffect() {
-    // Shimmer or skeleton effect for loading state
+    // Shimmer effect for loading state
     Box(
         modifier = Modifier
             .fillMaxSize()
