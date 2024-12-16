@@ -328,18 +328,21 @@ class SOSActivity : ComponentActivity() {
 
         storageReference.putFile(fileUri)
             .addOnSuccessListener {
-                // Get the download URL after a successful upload
                 storageReference.downloadUrl.addOnSuccessListener { uri ->
                     Log.d("SOS_TICKET", "Image uploaded successfully: $uri")
 
-                    // Create ImageData and add to the list
-                    val imageData = ImageData(url = uri.toString(), timestamp = captureTimestamp)
+                    val gsBucketUrl = "gs://suraksha-kawach-24ff7.appspot.com/emergency-images/${file.name}"
+
+                    val imageData = ImageData(
+                        url = uri.toString(),
+                        timestamp = captureTimestamp,
+                        gsBucketUrl = gsBucketUrl
+                    )
                     imageDataList.add(imageData)
 
-                    // Now send the image data to the backend
                     sendImageDataToBackend(firebaseUID, imageDataList)
 
-                    file.delete() // Optionally delete the file after upload
+                    file.delete()
                 }
             }
             .addOnFailureListener {
@@ -353,6 +356,12 @@ class SOSActivity : ComponentActivity() {
 
             lifecycleScope.launch {
                 try {
+                    val imagesData = imagesData.map { imageData ->
+                        imageData.copy(
+                            gsBucketUrl = generateGsBucketUrl(imageData.url)
+                        )
+                    }
+
                     val success = Api().sendImages(sosTicketId!!, firebaseUID, imagesData)
                     if (success) {
                         Log.d("SOS_TICKET", "Image data sent successfully to the server")
@@ -366,6 +375,13 @@ class SOSActivity : ComponentActivity() {
         } else {
             Log.e("SOS_TICKET", "Cannot send image data. SOS ticket ID is null.")
         }
+    }
+
+    private fun generateGsBucketUrl(url: String): String {
+        val bucketName = "suraksha-kawach-24ff7.appspot.com"
+        val folderName = "emergency-images"
+        val fileName = url.substringAfterLast("/")
+        return "gs://$bucketName/$folderName/$fileName"
     }
 
     private fun startAudioRecordingAtIntervals() {
@@ -427,7 +443,7 @@ class SOSActivity : ComponentActivity() {
                     val clipData = ClipData(url = audioUrl, timestamp = captureTimestamp)
                     sendClipsDataToBackend(firebaseUID, listOf(clipData))
 
-                    audioFile.delete() // Optionally delete the file after upload
+                    audioFile.delete()
                 }.addOnFailureListener {
                     Log.e("SOS_TICKET", "Failed to get audio URL: ${it.message}")
                 }

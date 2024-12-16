@@ -5,7 +5,8 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class ImageData(
     val url: String,
-    val timestamp: Long
+    val timestamp: Long,
+    val gsBucketUrl: String
 )
 
 @Serializable
